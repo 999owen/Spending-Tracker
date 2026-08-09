@@ -382,7 +382,7 @@
                         <div class="amount text-red" id="val-spent">$0.00</div>
                     </div>
                     <div class="card">
-                        <h3>Spending Money (35%)</h3>
+                        <h3 id="label-allowance">Spending Money (35%)</h3>
                         <div class="amount text-green" id="val-allowance">$0.00</div>
                     </div>
                     <div class="card">
@@ -478,43 +478,18 @@
         </div>
     </div>
 
+    <script src="store.js"></script>
     <script>
-        // Data Structure & Storage Key
-        const STORAGE_KEY = 'owens_tracker_data';
-        const SPENDING_PERCENTAGE = 0.35;
-        const WEEKLY_GROCERY_LIMIT = 75.00;
+        let db = TrackerStore.load();
 
-        // Default Data Initialization
-        const defaultData = {
-            "income_entries": [
-                { "date": "2026-08-01", "amount": 467.75, "notes": "Week 1" },
-                { "date": "2026-08-08", "amount": 343.00, "notes": "Week 2 (Drive)" }
-            ],
-            "spend_entries": [
-                { "date": "2026-08-02", "amount": 12.18, "notes": "Kroger" },
-                { "date": "2026-08-05", "amount": 12.71, "notes": "Amazon" },
-                { "date": "2026-08-10", "amount": 118.25, "notes": "Joe's Pizza (two trips)" },
-                { "date": "2026-08-15", "amount": 247.49, "notes": "Bike repair" }
-            ],
-            "grocery_entries": [
-                { "date": "2026-08-05", "amount": 45.20, "notes": "Meijer" },
-                { "date": "2026-08-12", "amount": 82.10, "notes": "Walmart" },
-                { "date": "2026-08-19", "amount": 64.50, "notes": "Costco" },
-                { "date": "2026-08-26", "amount": 54.20, "notes": "Kroger" }
-            ]
-        };
-
-        let db = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (!db) {
-            db = defaultData;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-        }
+        const SPENDING_PERCENTAGE = db.settings.spending_percentage / 100;
+        const WEEKLY_GROCERY_LIMIT = db.settings.weekly_grocery_limit;
 
         let spendingChartInstance = null;
         let groceryChartInstance = null;
 
         // Utility formatter
-        const moneyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+        const moneyFormatter = TrackerStore.formatter(db);
 
         function updateDashboard() {
             // 1. Calculate Totals
@@ -541,6 +516,8 @@
             document.getElementById('val-earned').textContent = moneyFormatter.format(totalEarned);
             document.getElementById('val-spent').textContent = moneyFormatter.format(absoluteTotalSpent);
             document.getElementById('val-allowance').textContent = moneyFormatter.format(spendingAllowance);
+            document.getElementById('label-allowance').textContent =
+                'Spending Money (' + db.settings.spending_percentage + '%)';
             
             const remainingEl = document.getElementById('val-remaining');
             remainingEl.textContent = moneyFormatter.format(amountRemaining);
@@ -564,57 +541,68 @@
             // Sort by date descending and take top 5
             const sorted = [...dataArray].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
 
-            sorted.forEach((entry, index) => {
+            if (sorted.length === 0) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>
-                        <div style="font-weight: 600;">${entry.notes}</div>
-                        <div style="font-size: 10px; color: var(--text-muted);">${entry.date}</div>
-                    </td>
-                    <td>${moneyFormatter.format(entry.amount)}</td>
-                    <td>
-                        <button class="delete-btn" onclick="deleteEntry('${typeStr}', '${entry.date}', ${entry.amount})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
+                tr.innerHTML = '<td colspan="3" style="color: var(--text-muted); text-align: center; padding: 18px;">No entries yet.</td>';
+                tbody.appendChild(tr);
+                return;
+            }
+
+            sorted.forEach((entry) => {
+                const tr = document.createElement('tr');
+
+                const infoCell = document.createElement('td');
+                const notesEl = document.createElement('div');
+                notesEl.style.fontWeight = '600';
+                notesEl.textContent = entry.notes;
+                const dateEl = document.createElement('div');
+                dateEl.style.cssText = 'font-size: 10px; color: var(--text-muted);';
+                dateEl.textContent = entry.date;
+                infoCell.appendChild(notesEl);
+                infoCell.appendChild(dateEl);
+
+                const amountCell = document.createElement('td');
+                amountCell.textContent = moneyFormatter.format(entry.amount);
+
+                const actionCell = document.createElement('td');
+                const btn = document.createElement('button');
+                btn.className = 'delete-btn';
+                btn.innerHTML = '<i class="fas fa-trash"></i>';
+                btn.addEventListener('click', () => deleteEntry(typeStr, entry));
+                actionCell.appendChild(btn);
+
+                tr.appendChild(infoCell);
+                tr.appendChild(amountCell);
+                tr.appendChild(actionCell);
                 tbody.appendChild(tr);
             });
         }
 
-        function deleteEntry(type, date, amount) {
+        function deleteEntry(type, entry) {
             if (!confirm("Remove this entry?")) return;
-            const arrayKey = type + "_entries";
-            // Find and remove the first match
-            const index = db[arrayKey].findIndex(e => e.date === date && parseFloat(e.amount) === amount);
-            if (index > -1) {
-                db[arrayKey].splice(index, 1);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-                updateDashboard();
-            }
+            db = TrackerStore.deleteEntry(db, type, entry);
+            updateDashboard();
         }
 
         // Handle Forms
         document.getElementById('income-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            db.income_entries.push({
+            db = TrackerStore.addEntry(db, 'income', {
                 date: document.getElementById('inc-date').value,
-                amount: parseFloat(document.getElementById('inc-amount').value),
+                amount: document.getElementById('inc-amount').value,
                 notes: document.getElementById('inc-notes').value
             });
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             this.reset();
             updateDashboard();
         });
 
         document.getElementById('spend-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            db.spend_entries.push({
+            db = TrackerStore.addEntry(db, 'spend', {
                 date: document.getElementById('spd-date').value,
-                amount: parseFloat(document.getElementById('spd-amount').value),
+                amount: document.getElementById('spd-amount').value,
                 notes: document.getElementById('spd-notes').value
             });
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
             this.reset();
             updateDashboard();
         });
