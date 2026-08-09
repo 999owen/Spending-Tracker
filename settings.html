@@ -276,7 +276,7 @@
                                 <p>Percentage of income designated for active spending.</p>
                             </div>
                             <div>
-                                <input type="number" value="35" min="1" max="100"> %
+                                <input type="number" id="set-spending-pct" value="35" min="1" max="100"> %
                             </div>
                         </div>
 
@@ -286,7 +286,7 @@
                                 <p>Set the threshold line for your grocery charts.</p>
                             </div>
                             <div>
-                                $<input type="number" value="75" min="1">
+                                $<input type="number" id="set-grocery-limit" value="75" min="1">
                             </div>
                         </div>
                         
@@ -296,7 +296,7 @@
                                 <p>Format used for dashboard values.</p>
                             </div>
                             <div>
-                                <select>
+                                <select id="set-currency">
                                     <option value="USD">USD ($)</option>
                                     <option value="EUR">EUR (€)</option>
                                     <option value="GBP">GBP (£)</option>
@@ -357,80 +357,77 @@
     </div>
 
     <!-- Data Management Logic -->
+    <script src="store.js"></script>
     <script>
-        // Example structure of what your saved data might look like
-        const mockDatabase = {
-            "last_updated": new Date().toISOString(),
-            "income_entries": [
-                { "week": 1, "amount": 467.75 },
-                { "week": "2 (Drive)", "amount": 343.00 }
-            ],
-            "spend_entries": [
-                { "item": "Kroger", "amount": 12.18 },
-                { "item": "Amazon", "amount": 12.71 }
-            ],
-            "grocery_entries": [
-                { "date": "2027-01-08", "amount": 54.20 },
-                { "date": "2027-01-15", "amount": 28.50 }
-            ]
-        };
+        let db = TrackerStore.load();
 
-        // 1. Export Data Logic
-        function exportData() {
-            // Convert the data object to a JSON string
-            const dataStr = JSON.stringify(mockDatabase, null, 2);
-            
-            // Create a Blob containing the JSON text
-            const blob = new Blob([dataStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            
-            // Create a temporary anchor element to trigger the download
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "owens_tracker_backup.json";
-            
-            // Click it and clean up
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+        // --- Preferences: load current values, save on change ---
+        const pctInput = document.getElementById('set-spending-pct');
+        const limitInput = document.getElementById('set-grocery-limit');
+        const currencySelect = document.getElementById('set-currency');
+
+        function loadSettingsIntoForm() {
+            pctInput.value = db.settings.spending_percentage;
+            limitInput.value = db.settings.weekly_grocery_limit;
+            currencySelect.value = db.settings.currency;
         }
 
-        // 2. Import Data Logic
+        pctInput.addEventListener('change', () => {
+            db.settings.spending_percentage = Number(pctInput.value) || db.settings.spending_percentage;
+            TrackerStore.save(db);
+        });
+        limitInput.addEventListener('change', () => {
+            db.settings.weekly_grocery_limit = Number(limitInput.value) || db.settings.weekly_grocery_limit;
+            TrackerStore.save(db);
+        });
+        currencySelect.addEventListener('change', () => {
+            db.settings.currency = currencySelect.value;
+            TrackerStore.save(db);
+        });
+
+        loadSettingsIntoForm();
+    </script>
+    <script>
+        // 1. Export Data - downloads everything currently in localStorage
+        function exportData() {
+            TrackerStore.exportToFile();
+        }
+
+        // 2. Import Data - replaces localStorage with the contents of a backup file
         function handleFileImport(event) {
             const file = event.target.files[0];
             if (!file) return;
 
+            if (!confirm("Importing replaces all current data. Continue?")) {
+                event.target.value = "";
+                return;
+            }
+
             const reader = new FileReader();
-            
-            // Define what happens when the file is read
-            reader.onload = function(e) {
+
+            reader.onload = function (e) {
                 try {
-                    const importedData = JSON.parse(e.target.result);
-                    console.log("Successfully parsed JSON:", importedData);
-                    
-                    // In a real application, you would save this to localStorage here
-                    // e.g., localStorage.setItem('finData', JSON.stringify(importedData));
-                    
-                    alert("Backup imported successfully! The dashboard will now update.");
-                    
-                    // Reset the file input so you can upload the same file again if needed
-                    document.getElementById('importFile').value = "";
-                    
+                    db = TrackerStore.importFromJSON(e.target.result);
+                    loadSettingsIntoForm();
+                    const count = db.income_entries.length + db.spend_entries.length + db.grocery_entries.length;
+                    alert("Backup imported successfully - " + count + " entries restored.");
                 } catch (error) {
                     alert("Error importing file. Please ensure it is a valid JSON backup.");
-                    console.error("JSON Parsing error:", error);
+                    console.error("Import error:", error);
+                } finally {
+                    // Reset the file input so the same file can be picked again
+                    document.getElementById('importFile').value = "";
                 }
             };
-            
-            // Read the file as text
+
             reader.readAsText(file);
         }
 
-        // 3. Clear Data Logic
+        // 3. Clear Data - wipes the stored entries and settings
         function clearData() {
             if (confirm("Are you entirely sure you want to clear all data? This cannot be undone unless you have a backup.")) {
-                // In a real app: localStorage.clear();
+                db = TrackerStore.clear();
+                loadSettingsIntoForm();
                 alert("All local data has been cleared.");
             }
         }
