@@ -9,7 +9,6 @@
 //   read()             - parse the file and hand back the whole document
 //   write(doc)         - serialise the whole document back over the file
 //   clear()            - delete the file outright
-//   replaceFromJSON()  - overwrite the file with an imported one
 //   toJSON()           - the exact text that Export downloads
 //
 // Every operation goes through the whole document. Nothing writes a partial
@@ -40,13 +39,15 @@
 // Reading is forgiving and writing is strict: anything that fails those rules
 // is dropped on the way in and reported, rather than being stored as $0.00.
 //
-// Because there is exactly one document, the three destructive operations are
-// simple and total:
-//   Clear  - removes the key. Nothing is left behind.
-//   Import - REPLACES the document. Existing entries and settings are gone,
-//            not merged with the file.
-//   Export - writes the document out verbatim, so an export re-imported gives
-//            back byte-identical data.
+// Import is a two-step operation, so the page can ask before destroying
+// anything:
+//   parseBackup(text) - validate a file WITHOUT storing it
+//   replaceWith(doc)  - wipe: discard everything stored, keep only the backup
+//   mergeWith(doc)    - keep: add the backup's entries, leaving existing
+//                       entries and existing settings alone
+//
+// Clear removes the key; nothing is left behind. Export writes the document out
+// verbatim, so an export re-imported with replaceWith gives back identical data.
 // =============================================================================
 
 (function (global) {
@@ -119,19 +120,27 @@
 
     // -------------------------------------------------------------- validation
 
+    // A blank or unusable value keeps `fallback`. Number('') is 0, which would
+    // otherwise clamp an emptied input down to the minimum (1% / $0.01) and
+    // silently rewrite the setting.
     function clampNumber(value, fallback, min, max) {
+        if (value === null || value === undefined || String(value).trim() === '') return fallback;
         const n = Number(value);
         if (!isFinite(n)) return fallback;
         return Math.min(Math.max(n, min), max);
     }
 
-    function validateSettings(raw) {
-        const s = Object.assign({}, DEFAULT_SETTINGS, raw && typeof raw === 'object' ? raw : {});
+    // `base` supplies the fallbacks. Editing settings passes the current ones, so
+    // clearing a field keeps what was there; importing passes nothing, so a file
+    // missing a setting gets the default.
+    function validateSettings(raw, base) {
+        const fallbacks = Object.assign({}, DEFAULT_SETTINGS, base && typeof base === 'object' ? base : {});
+        const s = Object.assign({}, fallbacks, raw && typeof raw === 'object' ? raw : {});
         return {
-            spending_percentage: clampNumber(s.spending_percentage, DEFAULT_SETTINGS.spending_percentage, 1, 100),
-            weekly_grocery_limit: clampNumber(s.weekly_grocery_limit, DEFAULT_SETTINGS.weekly_grocery_limit, 0.01, 1e9),
+            spending_percentage: clampNumber(s.spending_percentage, fallbacks.spending_percentage, 1, 100),
+            weekly_grocery_limit: clampNumber(s.weekly_grocery_limit, fallbacks.weekly_grocery_limit, 0.01, 1e9),
             // An unrecognised currency makes Intl.NumberFormat throw and blanks every page.
-            currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : DEFAULT_SETTINGS.currency
+            currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : fallbacks.currency
         };
     }
 
@@ -160,7 +169,8 @@
     }
 
     // Turns anything at all into a valid document. Reports how many entries had
-    // to be dropped, and whether older records needed ids adding.
+    // to be dropped, and whether anything needed rewriting (missing ids, a
+    // repeated id, an older schema).
     function validateDocument(raw) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
             return { doc: emptyDocument(), skipped: 0, upgraded: false };
@@ -173,13 +183,24 @@
         let skipped = 0;
         let upgraded = raw.schema_version !== SCHEMA_VERSION;
 
+        // Ids must be unique across the whole document. A hand-written or
+        // duplicated backup can repeat one, and delete works by id - two rows
+        // sharing an id means deleting either removes the first.
+        const usedIds = new Set();
+
         TYPES.forEach(type => {
             const key = type + '_entries';
             const list = Array.isArray(raw[key]) ? raw[key] : [];
             list.forEach(item => {
                 const result = validateEntry(item);
                 if (result.error) { skipped++; return; }
-                if (!item.id) upgraded = true; // pre-id record, needs writing back
+
+                if (!item || !item.id) upgraded = true; // pre-id record
+                if (usedIds.has(result.entry.id)) {
+                    result.entry.id = newId(); // repeated id, give this row its own
+                    upgraded = true;
+                }
+                usedIds.add(result.entry.id);
                 doc[key].push(result.entry);
             });
         });
@@ -209,9 +230,17 @@
             return emptyDocument();
         }
 
-        // Records from an older version are upgraded once, in place.
-        if (result.upgraded || result.skipped > 0) {
+        // Records from an older version are upgraded once, in place. Entries that
+        // failed validation are ignored but deliberately NOT written away here -
+        // loading a page should never silently destroy data on disk. They go only
+        // when something else writes the document.
+        if (result.upgraded) {
             try { writeRaw(result.doc); } catch (err) { /* still readable */ }
+        }
+        if (result.skipped > 0) {
+            console.warn('Ignored ' + result.skipped + ' stored ' +
+                (result.skipped === 1 ? 'entry' : 'entries') +
+                ' with a missing or invalid date or amount.');
         }
         return result.doc;
     }
@@ -281,7 +310,8 @@
         const doc = read();
         const next = Object.assign({}, doc.settings);
         next[key] = value;
-        doc.settings = validateSettings(next);
+        // Current settings are the fallbacks, so a cleared field keeps its value.
+        doc.settings = validateSettings(next, doc.settings);
         return write(doc);
     }
 
@@ -292,8 +322,13 @@
         return JSON.stringify(read(), null, 2);
     }
 
+    // Returns the counts written. Nothing is downloaded when there is nothing to
+    // export, so the caller can say so instead of handing over an empty file.
     function exportToFile() {
         const doc = read();
+        const n = counts(doc);
+        if (n.total === 0) return n;
+
         const stamp = toDateString(new Date());
         const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -308,7 +343,7 @@
         // Revoking immediately can cancel the download in some browsers.
         setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-        return counts(doc);
+        return n;
     }
 
     // Validates a backup WITHOUT storing it, so the page can show the user what
@@ -365,13 +400,6 @@
 
         write(doc);
         return { doc: doc, added: added, duplicates: duplicates };
-    }
-
-    // Convenience: parse and wipe in one call.
-    function replaceFromJSON(text) {
-        const parsed = parseBackup(text);
-        replaceWith(parsed.doc);
-        return { doc: parsed.doc, imported: parsed.entries, skipped: parsed.skipped };
     }
 
     // ------------------------------------------------------------- derived data
@@ -487,7 +515,6 @@
         parseBackup: parseBackup,
         replaceWith: replaceWith,
         mergeWith: mergeWith,
-        replaceFromJSON: replaceFromJSON,
 
         // entry operations
         addEntry: addEntry,
