@@ -358,7 +358,7 @@
     <!-- Data Management Logic -->
     <script src="store.js"></script>
     <script>
-        let db = TrackerStore.load();
+        let doc = TrackerStore.read();
 
         // --- Preferences: load current values, save on change ---
         const pctInput = document.getElementById('set-spending-pct');
@@ -366,16 +366,16 @@
         const currencySelect = document.getElementById('set-currency');
 
         function loadSettingsIntoForm() {
-            pctInput.value = db.settings.spending_percentage;
-            limitInput.value = db.settings.weekly_grocery_limit;
-            currencySelect.value = db.settings.currency;
+            pctInput.value = doc.settings.spending_percentage;
+            limitInput.value = doc.settings.weekly_grocery_limit;
+            currencySelect.value = doc.settings.currency;
         }
 
         // The store clamps out-of-range values, then the form reloads to show
         // what was actually saved rather than what was typed.
         function applySetting(key, value) {
             try {
-                db = TrackerStore.updateSetting(key, value);
+                doc = TrackerStore.updateSetting(key, value);
             } catch (err) {
                 alert(err.message);
             }
@@ -388,7 +388,7 @@
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
-            db = fresh;
+            doc = fresh;
             loadSettingsIntoForm();
         });
 
@@ -414,7 +414,13 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            if (!confirm("Importing replaces all current data. Continue?")) {
+            // Import is a restore, not a merge - say so before overwriting.
+            const existing = TrackerStore.counts(TrackerStore.read());
+            const warning = existing.total === 0
+                ? "Import this backup?"
+                : "This replaces everything currently stored (" + existing.total +
+                  " entries) with the contents of this file. Continue?";
+            if (!confirm(warning)) {
                 event.target.value = "";
                 return;
             }
@@ -428,11 +434,11 @@
 
             reader.onload = function (e) {
                 try {
-                    const result = TrackerStore.importFromJSON(e.target.result);
-                    db = result.db;
+                    const result = TrackerStore.replaceFromJSON(e.target.result);
+                    doc = result.doc;
                     loadSettingsIntoForm();
 
-                    const n = TrackerStore.counts(db);
+                    const n = TrackerStore.counts(doc);
                     let message = "Backup imported - " + result.imported + " entries restored " +
                         "(" + n.income + " paycheck, " + n.spend + " spend, " + n.grocery + " grocery).";
                     if (result.skipped > 0) {
@@ -454,7 +460,7 @@
 
         // 3. Clear Data - wipes the stored entries and settings
         function clearData() {
-            const n = TrackerStore.counts(TrackerStore.load());
+            const n = TrackerStore.counts(TrackerStore.read());
             if (n.total === 0) {
                 alert("There is no data to clear - the tracker is already empty.");
                 return;
@@ -463,7 +469,7 @@
             if (!confirm("Delete " + detail + "? This cannot be undone unless you have a backup.")) return;
 
             try {
-                db = TrackerStore.clear();
+                doc = TrackerStore.clear();
             } catch (err) {
                 alert(err.message);
                 return;
