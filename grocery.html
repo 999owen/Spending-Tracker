@@ -294,19 +294,7 @@
                                     <th style="width: 30px;"></th> 
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td>2027-01-08</td>
-                                    <td style="color: var(--accent-red); font-weight: 600;">$54.20</td>
-                                    <td>Houghton Walmart - Medium grain rice for the Zojirushi & skillet ingredients</td>
-                                    <td><button class="delete-btn" onclick="deleteEntry(this)"><i class="fas fa-trash"></i></button></td>
-                                </tr>
-                                <tr>
-                                    <td>2027-01-15</td>
-                                    <td style="color: var(--accent-red); font-weight: 600;">$28.50</td>
-                                    <td>Shared house basics split with the 4 roommates</td>
-                                    <td><button class="delete-btn" onclick="deleteEntry(this)"><i class="fas fa-trash"></i></button></td>
-                                </tr>
+                            <tbody id="grocery-table-body">
                             </tbody>
                         </table>
                     </div>
@@ -317,11 +305,47 @@
     </div>
 
     <script>
+        const STORAGE_KEY = 'owens_tracker_data';
+
+        // Utility formatter
+        const moneyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+        function updateTables() {
+            let db = JSON.parse(localStorage.getItem(STORAGE_KEY));
+
+            const groceryTbody = document.getElementById('grocery-table-body');
+            groceryTbody.innerHTML = '';
+
+            if (db && db.grocery_entries) {
+                const sortedGrocery = [...db.grocery_entries].sort((a, b) => new Date(b.date) - new Date(a.date));
+                sortedGrocery.forEach(entry => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${entry.date}</td>
+                        <td style="color: var(--accent-red); font-weight: 600;">${moneyFormatter.format(entry.amount)}</td>
+                        <td>${entry.notes}</td>
+                        <td><button class="delete-btn" onclick="deleteEntry(this)"><i class="fas fa-trash"></i></button></td>
+                    `;
+                    groceryTbody.appendChild(tr);
+                });
+            }
+        }
+
         function deleteEntry(button) {
             if (confirm("Are you sure you want to delete this grocery entry?")) {
                 button.closest('tr').remove();
             }
         }
+
+        // Initialize tables on page load
+        updateTables();
+
+        // Listen for storage events (e.g. if cleared from settings page)
+        window.addEventListener('storage', (event) => {
+            if (event.key === STORAGE_KEY) {
+                updateTables();
+            }
+        });
     </script>
 
 </body>

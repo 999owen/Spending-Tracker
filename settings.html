@@ -430,7 +430,12 @@
         // 3. Clear Data Logic
         function clearData() {
             if (confirm("Are you entirely sure you want to clear all data? This cannot be undone unless you have a backup.")) {
-                // In a real app: localStorage.clear();
+                const emptyData = {
+                    income_entries: [],
+                    spend_entries: [],
+                    grocery_entries: []
+                };
+                localStorage.setItem('owens_tracker_data', JSON.stringify(emptyData));
                 alert("All local data has been cleared.");
             }
         }
