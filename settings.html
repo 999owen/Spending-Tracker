@@ -236,6 +236,73 @@
             border-color: rgba(96, 165, 250, 0.5);
         }
 
+        button.neon-btn.danger {
+            background-color: transparent;
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        button.neon-btn.danger:hover {
+            background-color: rgba(248, 113, 113, 0.1);
+            box-shadow: 0 0 10px rgba(248, 113, 113, 0.2);
+        }
+
+        /* Import choice dialog */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+
+        .modal-overlay[hidden] {
+            display: none;
+        }
+
+        .modal {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal p {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .modal .modal-question {
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .modal-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions .neon-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
     </style>
 </head>
 <body>
@@ -355,10 +422,28 @@
         </div>
     </div>
 
+    <!-- Import choice: wipe the existing entries, or keep them and add -->
+    <div class="modal-overlay" id="import-modal" hidden>
+        <div class="modal">
+            <h2>Import backup</h2>
+            <p id="import-modal-summary"></p>
+            <p class="modal-question">Do you want to wipe your current entries?</p>
+            <div class="modal-actions">
+                <button class="neon-btn danger" id="import-replace">
+                    <i class="fas fa-trash-alt"></i> Yes - wipe and replace
+                </button>
+                <button class="neon-btn green" id="import-merge">
+                    <i class="fas fa-plus"></i> No - keep mine and add
+                </button>
+                <button class="neon-btn" id="import-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Data Management Logic -->
     <script src="store.js"></script>
     <script>
-        let db = TrackerStore.load();
+        let doc = TrackerStore.read();
 
         // --- Preferences: load current values, save on change ---
         const pctInput = document.getElementById('set-spending-pct');
@@ -366,16 +451,16 @@
         const currencySelect = document.getElementById('set-currency');
 
         function loadSettingsIntoForm() {
-            pctInput.value = db.settings.spending_percentage;
-            limitInput.value = db.settings.weekly_grocery_limit;
-            currencySelect.value = db.settings.currency;
+            pctInput.value = doc.settings.spending_percentage;
+            limitInput.value = doc.settings.weekly_grocery_limit;
+            currencySelect.value = doc.settings.currency;
         }
 
         // The store clamps out-of-range values, then the form reloads to show
         // what was actually saved rather than what was typed.
         function applySetting(key, value) {
             try {
-                db = TrackerStore.updateSetting(key, value);
+                doc = TrackerStore.updateSetting(key, value);
             } catch (err) {
                 alert(err.message);
             }
@@ -388,7 +473,7 @@
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
-            db = fresh;
+            doc = fresh;
             loadSettingsIntoForm();
         });
 
@@ -409,52 +494,129 @@
             }
         }
 
-        // 2. Import Data - replaces localStorage with the contents of a backup file
+        // 2. Import Data
+        // The file is parsed and validated BEFORE anything is stored, so the
+        // dialog can show real numbers and a bad file never touches your data.
+        const importModal = document.getElementById('import-modal');
+        const importSummary = document.getElementById('import-modal-summary');
+        let pendingImport = null;
+
         function handleFileImport(event) {
             const file = event.target.files[0];
             if (!file) return;
-
-            if (!confirm("Importing replaces all current data. Continue?")) {
-                event.target.value = "";
-                return;
-            }
 
             const reader = new FileReader();
 
             reader.onerror = function () {
                 alert("Could not read that file. Please try again.");
-                document.getElementById('importFile').value = "";
+                clearFileInput();
             };
 
             reader.onload = function (e) {
+                let parsed;
                 try {
-                    const result = TrackerStore.importFromJSON(e.target.result);
-                    db = result.db;
-                    loadSettingsIntoForm();
-
-                    const n = TrackerStore.counts(db);
-                    let message = "Backup imported - " + result.imported + " entries restored " +
-                        "(" + n.income + " paycheck, " + n.spend + " spend, " + n.grocery + " grocery).";
-                    if (result.skipped > 0) {
-                        message += "\n\n" + result.skipped + " entr" + (result.skipped === 1 ? "y was" : "ies were") +
-                            " skipped because of a missing or invalid date or amount.";
-                    }
-                    alert(message);
+                    parsed = TrackerStore.parseBackup(e.target.result);
                 } catch (error) {
                     alert("Import failed. " + error.message);
                     console.error("Import error:", error);
-                } finally {
-                    // Reset the file input so the same file can be picked again
-                    document.getElementById('importFile').value = "";
+                    clearFileInput();
+                    return;
                 }
+
+                const existing = TrackerStore.counts(TrackerStore.read());
+
+                // Nothing stored yet, so there is nothing to wipe - just import.
+                if (existing.total === 0) {
+                    applyImport('replace', parsed);
+                    return;
+                }
+
+                pendingImport = parsed;
+                importSummary.textContent =
+                    'This file holds ' + parsed.entries + ' ' + plural(parsed.entries, 'entry', 'entries') +
+                    '. You currently have ' + existing.total + ' stored.';
+                importModal.hidden = false;
+                document.getElementById('import-replace').focus();
             };
 
             reader.readAsText(file);
         }
 
+        function plural(n, one, many) {
+            return n === 1 ? one : many;
+        }
+
+        function clearFileInput() {
+            document.getElementById('importFile').value = "";
+        }
+
+        function closeImportModal() {
+            importModal.hidden = true;
+            pendingImport = null;
+            clearFileInput();
+        }
+
+        // mode: 'replace' wipes the current entries, 'merge' keeps them and adds.
+        function applyImport(mode, parsed) {
+            let message;
+            try {
+                if (mode === 'replace') {
+                    const wiped = TrackerStore.counts(TrackerStore.read()).total;
+                    doc = TrackerStore.replaceWith(parsed.doc);
+                    const n = TrackerStore.counts(doc);
+                    message = "Backup imported - " + parsed.entries + " " + plural(parsed.entries, 'entry', 'entries') +
+                        " restored (" + n.income + " paycheck, " + n.spend + " spend, " + n.grocery + " grocery).";
+                    if (wiped > 0) {
+                        message += " Your previous " + wiped + " " + plural(wiped, 'entry was', 'entries were') + " wiped.";
+                    }
+                } else {
+                    const result = TrackerStore.mergeWith(parsed.doc);
+                    doc = result.doc;
+                    const n = TrackerStore.counts(doc);
+                    message = "Added " + result.added + " " + plural(result.added, 'entry', 'entries') +
+                        " to your existing ones - " + n.total + " total " +
+                        "(" + n.income + " paycheck, " + n.spend + " spend, " + n.grocery + " grocery). " +
+                        "Your settings were kept.";
+                    if (result.duplicates > 0) {
+                        message += "\n\n" + result.duplicates + " " + plural(result.duplicates, 'entry was', 'entries were') +
+                            " already present and skipped.";
+                    }
+                }
+
+                if (parsed.skipped > 0) {
+                    message += "\n\n" + parsed.skipped + " " + plural(parsed.skipped, 'entry was', 'entries were') +
+                        " skipped because of a missing or invalid date or amount.";
+                }
+
+                loadSettingsIntoForm();
+                alert(message);
+            } catch (error) {
+                alert("Import failed. " + error.message);
+                console.error("Import error:", error);
+            } finally {
+                closeImportModal();
+            }
+        }
+
+        document.getElementById('import-replace').addEventListener('click', () => {
+            if (pendingImport) applyImport('replace', pendingImport);
+        });
+        document.getElementById('import-merge').addEventListener('click', () => {
+            if (pendingImport) applyImport('merge', pendingImport);
+        });
+        document.getElementById('import-cancel').addEventListener('click', closeImportModal);
+
+        // Clicking the backdrop or pressing Escape cancels, same as Cancel.
+        importModal.addEventListener('click', e => {
+            if (e.target === importModal) closeImportModal();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !importModal.hidden) closeImportModal();
+        });
+
         // 3. Clear Data - wipes the stored entries and settings
         function clearData() {
-            const n = TrackerStore.counts(TrackerStore.load());
+            const n = TrackerStore.counts(TrackerStore.read());
             if (n.total === 0) {
                 alert("There is no data to clear - the tracker is already empty.");
                 return;
@@ -463,7 +625,7 @@
             if (!confirm("Delete " + detail + "? This cannot be undone unless you have a backup.")) return;
 
             try {
-                db = TrackerStore.clear();
+                doc = TrackerStore.clear();
             } catch (err) {
                 alert(err.message);
                 return;

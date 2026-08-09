@@ -275,47 +275,32 @@
             border-bottom: none;
         }
 
-        .delete-btn {
-            background: none;
-            border: none;
+        /* Read-only listings: long lists scroll inside the panel */
+        .table-scroll {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .table-scroll thead th {
+            position: sticky;
+            top: 0;
+            background-color: var(--panel-bg);
+            z-index: 1;
+        }
+
+        .panel-link {
             color: var(--text-muted);
-            cursor: pointer;
-            font-size: 14px;
-            padding: 5px;
-            transition: color 0.2s;
-        }
-
-        .delete-btn:hover {
-            color: var(--accent-red);
-        }
-
-        .input-group {
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
             display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.2s var(--ease-in-out);
         }
 
-        input[type="text"], input[type="number"], input[type="date"] {
-            flex: 1;
-            background-color: #1A1A1A;
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 13px;
-            transition: border-color 0.2s var(--ease-in-out);
-        }
-
-        input:focus {
-            outline: none;
-            border-color: rgba(96, 165, 250, 0.5);
-            box-shadow: 0 0 10px rgba(96, 165, 250, 0.1);
-        }
-
-        ::-webkit-calendar-picker-indicator {
-            filter: invert(1);
-            opacity: 0.6;
-            cursor: pointer;
+        .panel-link:hover {
+            color: var(--accent-blue);
         }
 
         button.neon-btn {
@@ -420,58 +405,50 @@
                 </div>
 
                 <div class="panels-grid">
-                    <!-- Income Entry -->
+                    <!-- Read-only listing. Entries are added and removed on the Entries page. -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h2>Income & Paychecks</h2>
+                            <h2>Incoming Paychecks</h2>
+                            <a href="entries.html" class="panel-link">Manage on Entries <i class="fas fa-arrow-right"></i></a>
                         </div>
-                        
-                        <form class="input-group" id="income-form">
-                            <input type="date" id="inc-date" required>
-                            <input type="number" id="inc-amount" placeholder="Actual Pay ($)" step="0.01" min="0.01" required>
-                            <input type="text" id="inc-notes" placeholder="Notes (e.g. Week 1)" required>
-                            <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
-                        </form>
 
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Date / Notes</th>
-                                    <th>Actual</th>
-                                    <th style="width: 20px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="income-table-body">
-                                <!-- JS populated -->
-                            </tbody>
-                        </table>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="income-table-body">
+                                    <!-- JS populated -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <!-- Spend Entry -->
+                    <!-- Read-only listing. Entries are added and removed on the Entries page. -->
                     <div class="panel">
                         <div class="panel-header">
-                            <h2>Weekly Spend Entry</h2>
+                            <h2>Weekly Spending</h2>
+                            <a href="entries.html" class="panel-link">Manage on Entries <i class="fas fa-arrow-right"></i></a>
                         </div>
 
-                        <form class="input-group" id="spend-form">
-                            <input type="date" id="spd-date" required>
-                            <input type="number" id="spd-amount" placeholder="Amount ($)" step="0.01" min="0.01" required>
-                            <input type="text" id="spd-notes" placeholder="Item / Vendor" required>
-                            <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
-                        </form>
-
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Date / Notes</th>
-                                    <th>Amount</th>
-                                    <th style="width: 20px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="spend-table-body">
-                                <!-- JS populated -->
-                            </tbody>
-                        </table>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="spend-table-body">
+                                    <!-- JS populated -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -480,28 +457,30 @@
 
     <script src="store.js"></script>
     <script>
-        let db = TrackerStore.load();
+        // The dashboard is a read-only view of the stored document. Entries are
+        // added and removed on the Entries and Groceries pages.
+        let doc = TrackerStore.read();
 
         let spendingChartInstance = null;
         let groceryChartInstance = null;
 
         // Utility formatter - rebuilt on change so a currency switch takes effect
-        let moneyFormatter = TrackerStore.formatter(db);
+        let moneyFormatter = TrackerStore.formatter(doc);
 
         TrackerStore.markActiveNav();
 
         function updateDashboard() {
-            moneyFormatter = TrackerStore.formatter(db);
+            moneyFormatter = TrackerStore.formatter(doc);
 
             // 1. Totals come from the shared store so every page agrees
-            const totals = TrackerStore.summary(db);
+            const totals = TrackerStore.summary(doc);
 
             // 2. Update Summary DOM Elements
             document.getElementById('val-earned').textContent = moneyFormatter.format(totals.earned);
             document.getElementById('val-spent').textContent = moneyFormatter.format(totals.totalSpent);
             document.getElementById('val-allowance').textContent = moneyFormatter.format(totals.allowance);
             document.getElementById('label-allowance').textContent =
-                'Spending Money (' + db.settings.spending_percentage + '%)';
+                'Spending Money (' + doc.settings.spending_percentage + '%)';
 
             const remainingEl = document.getElementById('val-remaining');
             remainingEl.textContent = moneyFormatter.format(totals.remaining);
@@ -514,109 +493,54 @@
             // Keeps its usual yellow, but goes red once the weekly limit is blown
             groceryLeftEl.className = 'amount ' + (totals.groceryLeft >= 0 ? 'text-yellow' : 'text-red');
 
-            // 3. Render Tables (Limit to 5 most recent for dashboard)
-            renderTable('income-table-body', db.income_entries, 'income');
-            renderTable('spend-table-body', db.spend_entries, 'spend');
+            // 3. Render the read-only listings, same order as the Entries page
+            renderList('income-table-body', 'income', 'color: var(--accent-green); font-weight: 600;');
+            renderList('spend-table-body', 'spend', '');
 
             // 4. Update Charts
             updateCharts();
         }
 
-        function renderTable(tbodyId, dataArray, typeStr) {
+        // Mirrors the Entries page listing: Date / Amount / Notes, newest first,
+        // with no controls - this is a view, not an editor.
+        function renderList(tbodyId, type, amountStyle) {
             const tbody = document.getElementById(tbodyId);
             tbody.innerHTML = '';
-            
-            // Sort by date descending and take top 5
-            const sorted = [...dataArray]
-                .sort((a, b) => TrackerStore.parseDate(b.date) - TrackerStore.parseDate(a.date))
-                .slice(0, 5);
 
-            if (sorted.length === 0) {
+            const rows = TrackerStore.sortedEntries(doc, type);
+
+            if (rows.length === 0) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = '<td colspan="3" style="color: var(--text-muted); text-align: center; padding: 18px;">No entries yet.</td>';
+                tr.innerHTML = '<td colspan="3" style="color: var(--text-muted); text-align: center; padding: 18px;">No entries yet. Add them on the Entries page.</td>';
                 tbody.appendChild(tr);
                 return;
             }
 
-            sorted.forEach((entry) => {
+            rows.forEach(entry => {
                 const tr = document.createElement('tr');
 
-                const infoCell = document.createElement('td');
-                const notesEl = document.createElement('div');
-                notesEl.style.fontWeight = '600';
-                notesEl.textContent = entry.notes;
-                const dateEl = document.createElement('div');
-                dateEl.style.cssText = 'font-size: 10px; color: var(--text-muted);';
-                dateEl.textContent = entry.date;
-                infoCell.appendChild(notesEl);
-                infoCell.appendChild(dateEl);
+                const dateCell = document.createElement('td');
+                dateCell.textContent = entry.date;
 
                 const amountCell = document.createElement('td');
                 amountCell.textContent = moneyFormatter.format(entry.amount);
+                if (amountStyle) amountCell.style.cssText = amountStyle;
 
-                const actionCell = document.createElement('td');
-                const btn = document.createElement('button');
-                btn.className = 'delete-btn';
-                btn.innerHTML = '<i class="fas fa-trash"></i>';
-                btn.addEventListener('click', () => deleteEntry(typeStr, entry.id));
-                actionCell.appendChild(btn);
+                const notesCell = document.createElement('td');
+                notesCell.textContent = entry.notes;
 
-                tr.appendChild(infoCell);
+                tr.appendChild(dateCell);
                 tr.appendChild(amountCell);
-                tr.appendChild(actionCell);
+                tr.appendChild(notesCell);
                 tbody.appendChild(tr);
             });
         }
-
-        function deleteEntry(type, id) {
-            if (!confirm("Remove this entry?")) return;
-            try {
-                db = TrackerStore.deleteEntry(type, id);
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            updateDashboard();
-        }
-
-        // Handle Forms
-        document.getElementById('income-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            try {
-                db = TrackerStore.addEntry('income', {
-                    date: document.getElementById('inc-date').value,
-                    amount: document.getElementById('inc-amount').value,
-                    notes: document.getElementById('inc-notes').value
-                });
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            this.reset();
-            updateDashboard();
-        });
-
-        document.getElementById('spend-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            try {
-                db = TrackerStore.addEntry('spend', {
-                    date: document.getElementById('spd-date').value,
-                    amount: document.getElementById('spd-amount').value,
-                    notes: document.getElementById('spd-notes').value
-                });
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            this.reset();
-            updateDashboard();
-        });
 
         // Charting Logic
         function updateCharts() {
             // -- Cumulative Chart --
             // Combine all spending (spend + grocery), sort by date, calculate cumulative
-            let allSpending = [...db.spend_entries, ...db.grocery_entries]
+            let allSpending = [...doc.spend_entries, ...doc.grocery_entries]
                 .sort((a, b) => TrackerStore.parseDate(a.date) - TrackerStore.parseDate(b.date));
 
             let cumulativeData = [];
@@ -667,8 +591,8 @@
 
             // -- Grocery Bar Chart --
             // Real calendar weeks, so a back-dated bill lands in the week it belongs to
-            const weeks = TrackerStore.groceryByWeek(db, 4);
-            const groceryLimit = db.settings.weekly_grocery_limit;
+            const weeks = TrackerStore.groceryByWeek(doc, 4);
+            const groceryLimit = doc.settings.weekly_grocery_limit;
             let groceryData = weeks.map(w => w.total);
             let groceryLabels = weeks.map(w => w.label);
             let limitData = weeks.map(() => groceryLimit);
@@ -721,7 +645,7 @@
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
-            db = fresh;
+            doc = fresh;
             updateDashboard();
         });
 

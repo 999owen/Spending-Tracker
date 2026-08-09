@@ -350,8 +350,8 @@
 
     <script src="store.js"></script>
     <script>
-        let db = TrackerStore.load();
-        let moneyFormatter = TrackerStore.formatter(db);
+        let doc = TrackerStore.read();
+        let moneyFormatter = TrackerStore.formatter(doc);
 
         TrackerStore.markActiveNav();
 
@@ -359,8 +359,7 @@
             const tbody = document.getElementById(tbodyId);
             tbody.innerHTML = '';
 
-            const rows = [...db[type + '_entries']]
-                .sort((a, b) => TrackerStore.parseDate(b.date) - TrackerStore.parseDate(a.date));
+            const rows = TrackerStore.sortedEntries(doc, type);
 
             if (rows.length === 0) {
                 const tr = document.createElement('tr');
@@ -389,7 +388,7 @@
                 btn.addEventListener('click', () => {
                     if (!confirm("Are you sure you want to delete this entry?")) return;
                     try {
-                        db = TrackerStore.deleteEntry(type, entry.id);
+                        doc = TrackerStore.removeEntry(type, entry.id);
                     } catch (err) {
                         alert(err.message);
                         return;
@@ -407,7 +406,7 @@
         }
 
         function renderAll() {
-            moneyFormatter = TrackerStore.formatter(db);
+            moneyFormatter = TrackerStore.formatter(doc);
             renderTable('income-table-body', 'income', 'color: var(--accent-green); font-weight: 600;');
             renderTable('spend-table-body', 'spend', '');
         }
@@ -416,7 +415,7 @@
             document.getElementById(formId).addEventListener('submit', function (e) {
                 e.preventDefault();
                 try {
-                    db = TrackerStore.addEntry(type, {
+                    doc = TrackerStore.addEntry(type, {
                         date: document.getElementById(fieldPrefix + '-date').value,
                         amount: document.getElementById(fieldPrefix + '-amount').value,
                         notes: document.getElementById(fieldPrefix + '-notes').value
@@ -435,7 +434,7 @@
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
-            db = fresh;
+            doc = fresh;
             renderAll();
         });
 
