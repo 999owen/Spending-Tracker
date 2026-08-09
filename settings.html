@@ -414,7 +414,7 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            if (!confirm("Importing replaces all current data. Continue?")) {
+            if (!confirm("Importing will merge the backup with your current data. Continue?")) {
                 event.target.value = "";
                 return;
             }

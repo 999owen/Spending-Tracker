@@ -151,6 +151,11 @@
 
     function persist(db) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+        try {
+            global.dispatchEvent(new Event('tracker-updated'));
+        } catch (e) {
+            // Ignore if event dispatch fails
+        }
         return db;
     }
 
@@ -215,10 +220,12 @@
 
     // Notify open pages when another tab clears, imports, or edits data.
     function subscribe(callback) {
+        const handler = function () { callback(load()); };
         global.addEventListener('storage', function (e) {
             // e.key is null when the whole store is wiped via localStorage.clear()
-            if (e.key === STORAGE_KEY || e.key === null) callback(load());
+            if (e.key === STORAGE_KEY || e.key === null) handler();
         });
+        global.addEventListener('tracker-updated', handler);
     }
 
     function clear() {
@@ -269,13 +276,28 @@
         if (!hasAnyList) throw new Error('That file contains no paycheck, spend or grocery entries.');
 
         const result = normalize(parsed);
-        const total = TYPES.reduce((sum, t) => sum + result.db[t + '_entries'].length, 0);
-        if (total === 0 && result.skipped > 0) {
-            throw new Error('Every entry in that file was invalid, so nothing was imported.');
+        const currentDb = load();
+
+        let importedCount = 0;
+        TYPES.forEach(type => {
+            const key = type + '_entries';
+            const existingIds = new Set(currentDb[key].map(e => e.id));
+            result.db[key].forEach(entry => {
+                if (!existingIds.has(entry.id)) {
+                    currentDb[key].push(entry);
+                    importedCount++;
+                }
+            });
+        });
+
+        currentDb.settings = result.db.settings;
+
+        if (importedCount === 0 && result.skipped > 0) {
+            throw new Error('Every entry in that file was invalid or already exists.');
         }
 
-        save(result.db);
-        return { db: result.db, imported: total, skipped: result.skipped };
+        save(currentDb);
+        return { db: currentDb, imported: importedCount, skipped: result.skipped };
     }
 
     function counts(db) {
