@@ -311,10 +311,10 @@
         return counts(doc);
     }
 
-    // REPLACES the document with the imported one. Whatever was stored before is
-    // discarded, including settings - this is a restore, not a merge.
-    // Returns {doc, imported, skipped}. Throws if the file is not usable.
-    function replaceFromJSON(text) {
+    // Validates a backup WITHOUT storing it, so the page can show the user what
+    // is in the file before asking how to apply it.
+    // Returns {doc, entries, skipped}. Throws if the file is not usable.
+    function parseBackup(text) {
         let parsed;
         try {
             parsed = JSON.parse(text);
@@ -329,13 +329,49 @@
         }
 
         const result = validateDocument(parsed);
-        const imported = counts(result.doc).total;
-        if (imported === 0 && result.skipped > 0) {
+        const entries = counts(result.doc).total;
+        if (entries === 0 && result.skipped > 0) {
             throw new Error('Every entry in that file was invalid, so nothing was imported.');
         }
+        return { doc: result.doc, entries: entries, skipped: result.skipped };
+    }
 
-        write(result.doc); // full overwrite
-        return { doc: result.doc, imported: imported, skipped: result.skipped };
+    // WIPE: discard everything stored and keep only the backup - entries and
+    // settings both. This is a restore.
+    function replaceWith(backupDoc) {
+        return write(backupDoc);
+    }
+
+    // KEEP: add the backup's entries to what is already stored. Existing entries
+    // and existing settings are left alone. An entry already present (same id,
+    // e.g. importing the same file twice) is counted as a duplicate and skipped
+    // rather than added again.
+    // Returns {doc, added, duplicates}.
+    function mergeWith(backupDoc) {
+        const doc = read();
+        let added = 0;
+        let duplicates = 0;
+
+        TYPES.forEach(type => {
+            const key = type + '_entries';
+            const seen = new Set(doc[key].map(e => e.id));
+            backupDoc[key].forEach(entry => {
+                if (seen.has(entry.id)) { duplicates++; return; }
+                seen.add(entry.id);
+                doc[key].push(entry);
+                added++;
+            });
+        });
+
+        write(doc);
+        return { doc: doc, added: added, duplicates: duplicates };
+    }
+
+    // Convenience: parse and wipe in one call.
+    function replaceFromJSON(text) {
+        const parsed = parseBackup(text);
+        replaceWith(parsed.doc);
+        return { doc: parsed.doc, imported: parsed.entries, skipped: parsed.skipped };
     }
 
     // ------------------------------------------------------------- derived data
@@ -448,6 +484,9 @@
         clear: clear,
         toJSON: toJSON,
         exportToFile: exportToFile,
+        parseBackup: parseBackup,
+        replaceWith: replaceWith,
+        mergeWith: mergeWith,
         replaceFromJSON: replaceFromJSON,
 
         // entry operations

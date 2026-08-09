@@ -60,7 +60,9 @@ All of these are on `TrackerStore`, defined in [`store.js`](store.js).
 | `read()` | Parse the document and return it. Unreadable or corrupt data returns an empty document instead of breaking the page. |
 | `write(doc)` | Serialise the whole document back over the key. |
 | `clear()` | **Delete the key outright.** Nothing is left behind. |
-| `replaceFromJSON(text)` | **Replace** the document with an imported one. |
+| `parseBackup(text)` | Validate a backup **without storing it**, so the page can show what is in the file before applying it. Throws if the file is unusable. |
+| `replaceWith(doc)` | **Wipe:** discard everything stored, keep only the backup. |
+| `mergeWith(doc)` | **Keep:** add the backup's entries to what is stored. |
 | `exportToFile()` | Download the document verbatim as `owens-tracker-backup-YYYY-MM-DD.json`. |
 | `addEntry(type, entry)` | Validate, then read → append → write. |
 | `removeEntry(type, id)` | Read → remove by id → write. |
@@ -71,14 +73,35 @@ All of these are on `TrackerStore`, defined in [`store.js`](store.js).
 
 `type` is `income`, `spend` or `grocery`.
 
-### The three destructive operations
+### Clear
 
-- **Clear** removes the key. A later `read()` returns a fresh empty document
-  *without* recreating the key, so cleared really means cleared.
-- **Import replaces.** Everything previously stored — entries *and* settings — is
-  discarded in favour of the file. It is a restore, not a merge.
-- **Export** writes the document out verbatim, so exporting and re-importing
-  returns identical data, ids included.
+Removes the key. A later `read()` returns a fresh empty document *without*
+recreating the key, so cleared really means cleared.
+
+### Import asks first
+
+The file is parsed and validated **before anything is stored**, so an unusable
+file can never damage what you already have. If entries are already stored, the
+Settings page then asks whether to wipe them:
+
+| Answer | Effect |
+| --- | --- |
+| **Yes — wipe and replace** | Everything stored, entries *and* settings, is discarded in favour of the file. A restore. |
+| **No — keep mine and add** | The file's entries are added to what is stored. Existing entries and **existing settings** are left alone. |
+| **Cancel** | Nothing is touched. |
+
+With nothing stored yet there is nothing to wipe, so the file is imported
+directly without the question.
+
+On **add**, an entry already present — same `id`, which is what happens when the
+same file is imported twice — is counted as a duplicate and skipped rather than
+added again. Entries from a file with no ids are given new ones, so those can
+genuinely duplicate; export files always carry ids.
+
+### Export
+
+Writes the document out verbatim, so exporting and re-importing with **wipe**
+returns identical data, ids included.
 
 ### Why every write re-reads first
 
