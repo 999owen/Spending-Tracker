@@ -60,7 +60,11 @@
         return db;
     }
 
-    function addEntry(db, type, entry) {
+    // Writes always re-read storage first. A page holding a stale copy in memory
+    // (e.g. it was open while another tab cleared or imported) would otherwise
+    // write its old entries back and resurrect deleted data.
+    function addEntry(_stale, type, entry) {
+        const db = load();
         db[type + '_entries'].push({
             date: entry.date,
             amount: parseFloat(entry.amount) || 0,
@@ -70,7 +74,8 @@
     }
 
     // Entries have no ids, so delete by exact date+amount+notes match.
-    function deleteEntry(db, type, entry) {
+    function deleteEntry(_stale, type, entry) {
+        const db = load();
         const list = db[type + '_entries'];
         const i = list.findIndex(e =>
             e.date === entry.date &&
@@ -81,6 +86,20 @@
             save(db);
         }
         return db;
+    }
+
+    function updateSetting(key, value) {
+        const db = load();
+        db.settings[key] = value;
+        return save(db);
+    }
+
+    // Notify open pages when another tab clears, imports, or edits data.
+    function subscribe(callback) {
+        window.addEventListener('storage', function (e) {
+            // e.key is null when the whole store is wiped via localStorage.clear()
+            if (e.key === STORAGE_KEY || e.key === null) callback(load());
+        });
     }
 
     function clear() {
@@ -127,6 +146,8 @@
         save: save,
         addEntry: addEntry,
         deleteEntry: deleteEntry,
+        updateSetting: updateSetting,
+        subscribe: subscribe,
         clear: clear,
         exportToFile: exportToFile,
         importFromJSON: importFromJSON,

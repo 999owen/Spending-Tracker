@@ -369,6 +369,12 @@
             renderGroceries();
         });
 
+        // Stay in sync if another tab clears or imports data
+        TrackerStore.subscribe(function (fresh) {
+            db = fresh;
+            renderGroceries();
+        });
+
         renderGroceries();
     </script>
 

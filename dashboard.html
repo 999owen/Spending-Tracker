@@ -715,6 +715,12 @@
             });
         }
 
+        // Stay in sync if another tab clears or imports data
+        TrackerStore.subscribe(function (fresh) {
+            db = fresh;
+            updateDashboard();
+        });
+
         // Initialize App
         updateDashboard();
 

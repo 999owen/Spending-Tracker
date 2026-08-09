@@ -426,6 +426,12 @@
             renderAll();
         });
 
+        // Stay in sync if another tab clears or imports data
+        TrackerStore.subscribe(function (fresh) {
+            db = fresh;
+            renderAll();
+        });
+
         renderAll();
     </script>
 
