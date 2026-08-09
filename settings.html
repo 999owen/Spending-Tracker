@@ -373,16 +373,21 @@
         }
 
         pctInput.addEventListener('change', () => {
-            db.settings.spending_percentage = Number(pctInput.value) || db.settings.spending_percentage;
-            TrackerStore.save(db);
+            db = TrackerStore.updateSetting('spending_percentage',
+                Number(pctInput.value) || db.settings.spending_percentage);
         });
         limitInput.addEventListener('change', () => {
-            db.settings.weekly_grocery_limit = Number(limitInput.value) || db.settings.weekly_grocery_limit;
-            TrackerStore.save(db);
+            db = TrackerStore.updateSetting('weekly_grocery_limit',
+                Number(limitInput.value) || db.settings.weekly_grocery_limit);
         });
         currencySelect.addEventListener('change', () => {
-            db.settings.currency = currencySelect.value;
-            TrackerStore.save(db);
+            db = TrackerStore.updateSetting('currency', currencySelect.value);
+        });
+
+        // Stay in sync if another tab clears or imports data
+        TrackerStore.subscribe(function (fresh) {
+            db = fresh;
+            loadSettingsIntoForm();
         });
 
         loadSettingsIntoForm();
