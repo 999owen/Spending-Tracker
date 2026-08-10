@@ -426,19 +426,11 @@
                             <h2>Income & Paychecks</h2>
                         </div>
                         
-                        <form class="input-group" id="income-form">
-                            <input type="date" id="inc-date" required>
-                            <input type="number" id="inc-amount" placeholder="Actual Pay ($)" step="0.01" min="0.01" required>
-                            <input type="text" id="inc-notes" placeholder="Notes (e.g. Week 1)" required>
-                            <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
-                        </form>
-
                         <table>
                             <thead>
                                 <tr>
                                     <th>Date / Notes</th>
                                     <th>Actual</th>
-                                    <th style="width: 20px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="income-table-body">
@@ -453,19 +445,11 @@
                             <h2>Weekly Spend Entry</h2>
                         </div>
 
-                        <form class="input-group" id="spend-form">
-                            <input type="date" id="spd-date" required>
-                            <input type="number" id="spd-amount" placeholder="Amount ($)" step="0.01" min="0.01" required>
-                            <input type="text" id="spd-notes" placeholder="Item / Vendor" required>
-                            <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
-                        </form>
-
                         <table>
                             <thead>
                                 <tr>
                                     <th>Date / Notes</th>
                                     <th>Amount</th>
-                                    <th style="width: 20px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="spend-table-body">
@@ -554,63 +538,11 @@
                 const amountCell = document.createElement('td');
                 amountCell.textContent = moneyFormatter.format(entry.amount);
 
-                const actionCell = document.createElement('td');
-                const btn = document.createElement('button');
-                btn.className = 'delete-btn';
-                btn.innerHTML = '<i class="fas fa-trash"></i>';
-                btn.addEventListener('click', () => deleteEntry(typeStr, entry.id));
-                actionCell.appendChild(btn);
-
                 tr.appendChild(infoCell);
                 tr.appendChild(amountCell);
-                tr.appendChild(actionCell);
                 tbody.appendChild(tr);
             });
         }
-
-        function deleteEntry(type, id) {
-            if (!confirm("Remove this entry?")) return;
-            try {
-                db = TrackerStore.deleteEntry(type, id);
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            updateDashboard();
-        }
-
-        // Handle Forms
-        document.getElementById('income-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            try {
-                db = TrackerStore.addEntry('income', {
-                    date: document.getElementById('inc-date').value,
-                    amount: document.getElementById('inc-amount').value,
-                    notes: document.getElementById('inc-notes').value
-                });
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            this.reset();
-            updateDashboard();
-        });
-
-        document.getElementById('spend-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            try {
-                db = TrackerStore.addEntry('spend', {
-                    date: document.getElementById('spd-date').value,
-                    amount: document.getElementById('spd-amount').value,
-                    notes: document.getElementById('spd-notes').value
-                });
-            } catch (err) {
-                alert(err.message);
-                return;
-            }
-            this.reset();
-            updateDashboard();
-        });
 
         // Charting Logic
         function updateCharts() {
@@ -647,8 +579,8 @@
                         borderWidth: 2,
                         pointBackgroundColor: '#4ADE80',
                         pointBorderColor: '#000',
-                        pointRadius: 3,
-                        pointHoverRadius: 6, 
+                        pointRadius: 8,
+                        pointHoverRadius: 10,
                         tension: 0.2, 
                         fill: true,
                         backgroundColor: mainChartGradient
