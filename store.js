@@ -44,21 +44,28 @@
         return parseDate(value) !== null;
     }
 
-    // Monday-start week. Returns the week's start date at local midnight.
-    function weekStart(date) {
-        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const offset = (d.getDay() + 6) % 7; // Sunday(0) -> 6, Monday(1) -> 0
-        d.setDate(d.getDate() - offset);
-        return d;
-    }
-
     function weekKey(value) {
-        const d = typeof value === 'string' ? parseDate(value) : value;
-        if (!d) return null;
-        const s = weekStart(d);
-        return s.getFullYear() + '-' +
-            String(s.getMonth() + 1).padStart(2, '0') + '-' +
-            String(s.getDate()).padStart(2, '0');
+        if (!value) return null;
+        let etDate;
+        if (typeof value === 'string') {
+            const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+            if (!m) return null;
+            // Parse string as 12:00 PM to avoid timezone boundary issues when applying ET offset
+            etDate = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+        } else if (value instanceof Date) {
+            const etString = value.toLocaleString('en-US', { timeZone: 'America/New_York' });
+            etDate = new Date(etString);
+        } else return null;
+
+        // Shift by 3 hours to enforce 3 AM reset
+        etDate.setHours(etDate.getHours() - 3);
+
+        const offset = (etDate.getDay() + 1) % 7; // Sat(6)->0, Sun(0)->1, etc.
+        etDate.setDate(etDate.getDate() - offset);
+
+        return etDate.getFullYear() + '-' +
+            String(etDate.getMonth() + 1).padStart(2, '0') + '-' +
+            String(etDate.getDate()).padStart(2, '0');
     }
 
     function clampNumber(value, fallback, min, max) {
@@ -318,7 +325,7 @@
         const earned = sum(db.income_entries);
         const spent = sum(db.spend_entries);
         const grocery = sum(db.grocery_entries);
-        const totalSpent = spent + grocery;
+        const totalSpent = spent;
         const allowance = earned * (db.settings.spending_percentage / 100);
         const thisWeek = weekKey(new Date());
 
@@ -353,9 +360,13 @@
         });
 
         const weeks = [];
-        const cursor = weekStart(new Date());
+        const currentKey = weekKey(new Date());
+        const cursor = parseDate(currentKey);
+        if (!cursor) return weeks;
         for (let i = 0; i < count; i++) {
-            const key = weekKey(cursor);
+            const key = cursor.getFullYear() + '-' +
+                String(cursor.getMonth() + 1).padStart(2, '0') + '-' +
+                String(cursor.getDate()).padStart(2, '0');
             weeks.unshift({
                 key: key,
                 label: i === 0 ? 'This Week' : (cursor.getMonth() + 1) + '/' + cursor.getDate(),
