@@ -170,13 +170,20 @@
         return db;
     }
 
-    function save(db) {
+    function save(db, isSyncSetting = false) {
         db.schema_version = SCHEMA_VERSION;
-        db.last_updated = new Date().toISOString();
+
+        // Don't bump last_updated or push if we are just configuring sync credentials
+        if (!isSyncSetting) {
+            db.last_updated = new Date().toISOString();
+        }
+
         try {
             persist(db);
-            // Async sync to gist
-            pushToGist(db);
+            if (!isSyncSetting) {
+                // Async sync to gist
+                pushToGist(db);
+            }
         } catch (err) {
             console.error('Could not save data:', err);
             const quota = err && (err.name === 'QuotaExceededError' || err.code === 22);
@@ -228,7 +235,9 @@
         const next = Object.assign({}, db.settings);
         next[key] = value;
         db.settings = normalizeSettings(next);
-        return save(db);
+
+        const isSyncSetting = key === 'github_token' || key === 'gist_id';
+        return save(db, isSyncSetting);
     }
 
     // Notify open pages when another tab clears, imports, or edits data.
