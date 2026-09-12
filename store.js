@@ -9,7 +9,9 @@
     const DEFAULT_SETTINGS = {
         spending_percentage: 35,
         weekly_grocery_limit: 75,
-        currency: 'USD'
+        currency: 'USD',
+        github_token: '',
+        gist_id: ''
     };
 
     const emptyData = () => ({
@@ -80,7 +82,9 @@
             spending_percentage: clampNumber(s.spending_percentage, DEFAULT_SETTINGS.spending_percentage, 1, 100),
             weekly_grocery_limit: clampNumber(s.weekly_grocery_limit, DEFAULT_SETTINGS.weekly_grocery_limit, 0.01, 1e9),
             // An unrecognised currency would make Intl.NumberFormat throw and blank every page.
-            currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : DEFAULT_SETTINGS.currency
+            currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : DEFAULT_SETTINGS.currency,
+            github_token: s.github_token ? String(s.github_token) : '',
+            gist_id: s.gist_id ? String(s.gist_id) : ''
         };
     }
 
@@ -171,6 +175,8 @@
         db.last_updated = new Date().toISOString();
         try {
             persist(db);
+            // Async sync to gist
+            pushToGist(db);
         } catch (err) {
             console.error('Could not save data:', err);
             const quota = err && (err.name === 'QuotaExceededError' || err.code === 22);
@@ -253,6 +259,13 @@
         const stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
         const payload = Object.assign({}, db, { exported_at: now.toISOString() });
 
+        // Remove sensitive info before exporting
+        if (payload.settings) {
+            payload.settings = Object.assign({}, payload.settings);
+            delete payload.settings.github_token;
+            delete payload.settings.gist_id;
+        }
+
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -297,7 +310,18 @@
             });
         });
 
+        // Preserve existing gist settings if not present in backup
+        const token = currentDb.settings.github_token;
+        const gistId = currentDb.settings.gist_id;
+
         currentDb.settings = result.db.settings;
+
+        if (token && !currentDb.settings.github_token) {
+            currentDb.settings.github_token = token;
+        }
+        if (gistId && !currentDb.settings.gist_id) {
+            currentDb.settings.gist_id = gistId;
+        }
 
         if (importedCount === 0 && result.skipped > 0) {
             throw new Error('Every entry in that file was invalid or already exists.');
@@ -386,6 +410,103 @@
         }
     }
 
+    async function pushToGist(db) {
+        if (!db.settings.github_token) return;
+
+        const payload = Object.assign({}, db);
+        payload.settings = Object.assign({}, db.settings);
+        const token = payload.settings.github_token;
+        const gistId = payload.settings.gist_id;
+
+        delete payload.settings.github_token;
+        delete payload.settings.gist_id;
+
+        const content = JSON.stringify(payload, null, 2);
+
+        const headers = {
+            'Authorization': 'token ' + token,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        };
+
+        const body = JSON.stringify({
+            description: "Owen's Spending Tracker Backup",
+            public: false,
+            files: {
+                "owens_tracker_backup.json": {
+                    content: content
+                }
+            }
+        });
+
+        try {
+            if (gistId) {
+                const res = await fetch('https://api.github.com/gists/' + gistId, {
+                    method: 'PATCH',
+                    headers: headers,
+                    body: body
+                });
+                if (!res.ok) throw new Error('Failed to update Gist');
+            } else {
+                const res = await fetch('https://api.github.com/gists', {
+                    method: 'POST',
+                    headers: headers,
+                    body: body
+                });
+                if (!res.ok) throw new Error('Failed to create Gist');
+                const data = await res.json();
+
+                const currentDb = load();
+                if (currentDb.settings.github_token === token) {
+                    const next = Object.assign({}, currentDb.settings);
+                    next.gist_id = data.id;
+                    currentDb.settings = normalizeSettings(next);
+                    persist(currentDb);
+                }
+            }
+        } catch (err) {
+            console.error('Gist push error:', err);
+        }
+    }
+
+    async function pullFromGist() {
+        const currentDb = load();
+        const token = currentDb.settings.github_token;
+        const gistId = currentDb.settings.gist_id;
+
+        if (!token || !gistId) return;
+
+        try {
+            const res = await fetch('https://api.github.com/gists/' + gistId, {
+                headers: {
+                    'Authorization': 'token ' + token,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                cache: 'no-store'
+            });
+
+            if (!res.ok) throw new Error('Failed to fetch Gist');
+            const data = await res.json();
+
+            const file = data.files['owens_tracker_backup.json'];
+            if (!file || !file.content) return;
+
+            const remoteDbResult = normalize(JSON.parse(file.content));
+            const remoteDb = remoteDbResult.db;
+
+            const localDate = currentDb.last_updated ? new Date(currentDb.last_updated) : new Date(0);
+            const remoteDate = remoteDb.last_updated ? new Date(remoteDb.last_updated) : new Date(0);
+
+            if (remoteDate > localDate) {
+                remoteDb.settings.github_token = token;
+                remoteDb.settings.gist_id = gistId;
+                persist(remoteDb);
+            }
+        } catch (err) {
+            console.error('Gist pull error:', err);
+        }
+    }
+
     // Marks the sidebar link for the page you are on.
     function markActiveNav() {
         const here = location.pathname.split('/').pop() || 'dashboard.html';
@@ -415,6 +536,11 @@
         weekKey: weekKey,
         parseDate: parseDate,
         formatter: formatter,
-        markActiveNav: markActiveNav
+        markActiveNav: markActiveNav,
+        pushToGist: pushToGist,
+        pullFromGist: pullFromGist
     };
+
+    // Auto-pull on load
+    pullFromGist();
 })(window);

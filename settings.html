@@ -349,6 +349,46 @@
                         </div>
                     </div>
 
+                    <!-- Sync Panel -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h2>GitHub Gist Sync</h2>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <h3>GitHub Token</h3>
+                                <p>A personal access token with gist permissions.</p>
+                            </div>
+                            <div>
+                                <input type="password" id="set-github-token" placeholder="ghp_..." style="width: 250px;">
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <h3>Gist ID</h3>
+                                <p>Leave blank to create a new Gist automatically.</p>
+                            </div>
+                            <div>
+                                <input type="text" id="set-gist-id" placeholder="Gist ID..." style="width: 250px;">
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
+                            <div class="setting-info">
+                                <h3>Manual Sync</h3>
+                                <p>Push your current data or pull the latest changes.</p>
+                            </div>
+                            <div>
+                                <button class="neon-btn blue" onclick="forceGistSync()">
+                                    <i class="fas fa-sync-alt"></i> Sync Now
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
                     <!-- Data Management Panel -->
                     <div class="panel">
                         <div class="panel-header">
@@ -409,11 +449,15 @@
         const pctInput = document.getElementById('set-spending-pct');
         const limitInput = document.getElementById('set-grocery-limit');
         const currencySelect = document.getElementById('set-currency');
+        const tokenInput = document.getElementById('set-github-token');
+        const gistIdInput = document.getElementById('set-gist-id');
 
         function loadSettingsIntoForm() {
             pctInput.value = db.settings.spending_percentage;
             limitInput.value = db.settings.weekly_grocery_limit;
             currencySelect.value = db.settings.currency;
+            tokenInput.value = db.settings.github_token;
+            gistIdInput.value = db.settings.gist_id;
         }
 
         // The store clamps out-of-range values, then the form reloads to show
@@ -430,6 +474,8 @@
         pctInput.addEventListener('change', () => applySetting('spending_percentage', pctInput.value));
         limitInput.addEventListener('change', () => applySetting('weekly_grocery_limit', limitInput.value));
         currencySelect.addEventListener('change', () => applySetting('currency', currencySelect.value));
+        tokenInput.addEventListener('change', () => applySetting('github_token', tokenInput.value));
+        gistIdInput.addEventListener('change', () => applySetting('gist_id', gistIdInput.value));
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
@@ -495,6 +541,18 @@
             };
 
             reader.readAsText(file);
+        }
+
+        async function forceGistSync() {
+            try {
+                if (db.settings.gist_id) {
+                    await TrackerStore.pullFromGist();
+                }
+                await TrackerStore.pushToGist(db);
+                alert('Sync complete!');
+            } catch (err) {
+                alert('Sync error: ' + err.message);
+            }
         }
 
         // 3. Clear Data - wipes the stored entries and settings
