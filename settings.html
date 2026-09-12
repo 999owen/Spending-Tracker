@@ -360,8 +360,11 @@
                                 <h3>GitHub Token</h3>
                                 <p>A personal access token with gist permissions.</p>
                             </div>
-                            <div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
                                 <input type="password" id="set-github-token" placeholder="ghp_..." style="width: 250px;">
+                                <button class="neon-btn" onclick="toggleTokenVisibility()" style="padding: 10px; min-width: 40px; justify-content: center;">
+                                    <i id="token-eye-icon" class="fas fa-eye"></i>
+                                </button>
                             </div>
                         </div>
 
@@ -541,6 +544,18 @@
             };
 
             reader.readAsText(file);
+        }
+
+        function toggleTokenVisibility() {
+            const input = document.getElementById('set-github-token');
+            const icon = document.getElementById('token-eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
         }
 
         async function forceGistSync() {
