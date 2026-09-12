@@ -441,6 +441,30 @@
 
         try {
             if (gistId) {
+                // Prevent overwriting a newer remote backup with stale/empty local data
+                const checkRes = await fetch('https://api.github.com/gists/' + gistId, {
+                    headers: {
+                        'Authorization': 'token ' + token,
+                        'Accept': 'application/vnd.github.v3+json'
+                    },
+                    cache: 'no-store'
+                });
+                if (checkRes.ok) {
+                    const data = await checkRes.json();
+                    const file = data.files['owens_tracker_backup.json'];
+                    if (file && file.content) {
+                        const remoteDb = normalize(JSON.parse(file.content)).db;
+                        const localDate = db.last_updated ? new Date(db.last_updated) : new Date(0);
+                        const remoteDate = remoteDb.last_updated ? new Date(remoteDb.last_updated) : new Date(0);
+
+                        if (remoteDate > localDate) {
+                            console.log('Aborting push: Remote gist is newer than local data. Pulling instead.');
+                            pullFromGist();
+                            return;
+                        }
+                    }
+                }
+
                 const res = await fetch('https://api.github.com/gists/' + gistId, {
                     method: 'PATCH',
                     headers: headers,
