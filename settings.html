@@ -441,7 +441,7 @@
     </div>
 
     <!-- Data Management Logic -->
-    <script src="store.js"></script>
+    <script src="store.js?v=2"></script>
     <script>
         let db = TrackerStore.load();
 
@@ -548,6 +548,8 @@
                 if (db.settings.gist_id) {
                     await TrackerStore.pullFromGist();
                 }
+                // Reload db after pulling so we push the updated state, not the stale closure state
+                db = TrackerStore.load();
                 await TrackerStore.pushToGist(db);
                 alert('Sync complete!');
             } catch (err) {
