@@ -457,6 +457,7 @@
 
         // Analytics Dashboard State
         let currentMonthDate = new Date();
+        currentMonthDate.setDate(1); // Prevent month navigation overflow on the 31st
         let groceryChartInstance = null;
 
         function renderGroceryDashboard() {

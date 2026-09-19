@@ -446,7 +446,7 @@
                 <div class="charts-grid">
                     <div class="chart-panel">
                         <div class="chart-panel-header">
-                            <h2>Cumulative Spending Trend</h2>
+                            <h2>Cumulative Spending Trend (Excl. Groceries)</h2>
                         </div>
                         <div class="chart-container">
                             <canvas id="spendingChart"></canvas>
@@ -591,8 +591,8 @@
         // Charting Logic
         function updateCharts() {
             // -- Cumulative Chart --
-            // Combine all spending (spend + grocery), sort by date, calculate cumulative
-            let allSpending = [...db.spend_entries, ...db.grocery_entries]
+            // Include only discretionary spending, sort by date, calculate cumulative
+            let allSpending = [...db.spend_entries]
                 .sort((a, b) => TrackerStore.parseDate(a.date) - TrackerStore.parseDate(b.date));
 
             let cumulativeData = [];
@@ -617,7 +617,7 @@
                 data: {
                     labels: cumulativeLabels, 
                     datasets: [{
-                        label: 'Cumulative Spend ($)',
+                        label: 'Cumulative Spend (Excl. Groceries)',
                         data: cumulativeData, 
                         borderColor: '#60A5FA',
                         borderWidth: 2,
