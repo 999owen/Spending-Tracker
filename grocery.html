@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Groceries - Owen's Spending Tracker</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-outer: #0A0A0A; 
@@ -246,7 +247,62 @@
             border-color: rgba(96, 165, 250, 0.4);
         }
 
+        /* Analytics Dashboard Styles */
+        .month-nav {
+            display: flex;
+            align-items: center;
+        }
+
+        .month-nav .neon-btn {
+            padding: 5px 15px;
+            font-size: 14px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .kpi-card {
+            background-color: #1A1A1A;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .kpi-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .kpi-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            background-color: #1A1A1A;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
         @media (max-width: 768px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
             .main-container {
                 flex-direction: column;
             }
@@ -323,6 +379,38 @@
                 </div>
 
                 <div class="panels-grid">
+
+                    <div class="panel dashboard-panel">
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h2>Grocery Analytics</h2>
+                            <div class="month-nav">
+                                <button id="prev-month-btn" class="neon-btn"><i class="fas fa-chevron-left"></i></button>
+                                <span id="current-month-display" style="font-weight: bold; margin: 0 15px;">Loading...</span>
+                                <button id="next-month-btn" class="neon-btn"><i class="fas fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                        <div class="kpi-grid">
+                            <div class="kpi-card">
+                                <h3>Total Spent</h3>
+                                <div class="kpi-value" id="kpi-total-spent">$0.00</div>
+                            </div>
+                            <div class="kpi-card">
+                                <h3>Weekly Average</h3>
+                                <div class="kpi-value" id="kpi-weekly-avg">$0.00</div>
+                            </div>
+                            <div class="kpi-card">
+                                <h3>Budget Remaining</h3>
+                                <div class="kpi-value" id="kpi-budget-remaining">$0.00</div>
+                            </div>
+                            <div class="kpi-card">
+                                <h3>Transactions</h3>
+                                <div class="kpi-value" id="kpi-transaction-count">0</div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="groceryMonthChart"></canvas>
+                        </div>
+                    </div>
                     
                     <div class="panel">
                         <div class="panel-header">
@@ -362,6 +450,171 @@
         let moneyFormatter = TrackerStore.formatter(db);
 
         TrackerStore.markActiveNav();
+
+        // Analytics Dashboard State
+        let currentMonthDate = new Date();
+        let groceryChartInstance = null;
+
+        function renderGroceryDashboard() {
+            moneyFormatter = TrackerStore.formatter(db);
+            const groceryLimit = db.settings.weekly_grocery_limit;
+
+            // Format current month for display
+            const monthNames = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"];
+            document.getElementById('current-month-display').textContent =
+                monthNames[currentMonthDate.getMonth()] + ' ' + currentMonthDate.getFullYear();
+
+            // Filter entries for the selected month
+            const year = currentMonthDate.getFullYear();
+            const month = currentMonthDate.getMonth();
+
+            const monthEntries = db.grocery_entries.filter(e => {
+                const d = TrackerStore.parseDate(e.date);
+                if (!d) return false;
+                return d.getFullYear() === year && d.getMonth() === month;
+            });
+
+            // KPI Calculations
+            const totalSpent = monthEntries.reduce((sum, e) => sum + e.amount, 0);
+            const transactionCount = monthEntries.length;
+
+            // Group by week using TrackerStore.weekKey
+            const weekTotals = {};
+            monthEntries.forEach(e => {
+                const key = TrackerStore.weekKey(e.date);
+                if (key) weekTotals[key] = (weekTotals[key] || 0) + e.amount;
+            });
+
+            // For weekly average, determine active weeks in month or use all weeks
+            const uniqueWeeks = Object.keys(weekTotals).sort();
+            const numWeeks = uniqueWeeks.length || 1; // avoid division by zero
+            const weeklyAvg = totalSpent / numWeeks;
+
+            // Assuming typically ~4.33 weeks per month, but dynamic budget based on active weeks
+            // To be precise with user's settings, let's just use limit * active weeks or 4 if 0
+            const budgetRemaining = ((uniqueWeeks.length > 0 ? uniqueWeeks.length : 4) * groceryLimit) - totalSpent;
+
+            // Update KPIs
+            document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent);
+            document.getElementById('kpi-weekly-avg').textContent = moneyFormatter.format(weeklyAvg);
+
+            const kpiBudget = document.getElementById('kpi-budget-remaining');
+            kpiBudget.textContent = moneyFormatter.format(budgetRemaining);
+            kpiBudget.style.color = budgetRemaining < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
+
+            document.getElementById('kpi-transaction-count').textContent = transactionCount;
+
+            // Prepare Chart Data
+            const labels = [];
+            const data = [];
+            const backgroundColors = [];
+
+            if (uniqueWeeks.length === 0) {
+                labels.push("No data");
+                data.push(0);
+                backgroundColors.push('rgba(96, 165, 250, 0.6)');
+            } else {
+                uniqueWeeks.forEach(wk => {
+                    const total = weekTotals[wk];
+                    labels.push(wk);
+                    data.push(total);
+                    // Color red if over weekly limit
+                    if (total > groceryLimit) {
+                        backgroundColors.push('rgba(248, 113, 113, 0.8)'); // red
+                    } else {
+                        backgroundColors.push('rgba(96, 165, 250, 0.8)'); // blue
+                    }
+                });
+            }
+
+            // Update or Create Chart
+            const ctx = document.getElementById('groceryMonthChart').getContext('2d');
+
+            if (groceryChartInstance) {
+                groceryChartInstance.data.labels = labels;
+                groceryChartInstance.data.datasets[0].data = data;
+                groceryChartInstance.data.datasets[0].backgroundColor = backgroundColors;
+
+                // Keep the limit line updated if it exists
+                if (groceryChartInstance.data.datasets[1]) {
+                    groceryChartInstance.data.datasets[1].data = labels.map(() => groceryLimit);
+                    groceryChartInstance.data.datasets[1].label = 'Limit (' + moneyFormatter.format(groceryLimit) + ')';
+                }
+
+                groceryChartInstance.update();
+            } else {
+                groceryChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                type: 'bar',
+                                label: 'Spend ($)',
+                                data: data,
+                                backgroundColor: backgroundColors,
+                                borderRadius: 4,
+                                order: 2
+                            },
+                            {
+                                type: 'line',
+                                label: 'Limit (' + moneyFormatter.format(groceryLimit) + ')',
+                                data: labels.map(() => groceryLimit),
+                                borderColor: '#F87171',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                pointRadius: 0,
+                                fill: false,
+                                order: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#8B949E' }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed.y !== null) {
+                                            label += moneyFormatter.format(context.parsed.y);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { color: '#8B949E' },
+                                grid: { color: '#2D333B', drawBorder: false }
+                            },
+                            y: {
+                                ticks: { color: '#8B949E' },
+                                grid: { color: '#2D333B', drawBorder: false },
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        document.getElementById('prev-month-btn').addEventListener('click', () => {
+            currentMonthDate.setMonth(currentMonthDate.getMonth() - 1);
+            renderGroceryDashboard();
+        });
+
+        document.getElementById('next-month-btn').addEventListener('click', () => {
+            currentMonthDate.setMonth(currentMonthDate.getMonth() + 1);
+            renderGroceryDashboard();
+        });
 
         function renderGroceries() {
             moneyFormatter = TrackerStore.formatter(db);
@@ -416,6 +669,8 @@
                 tr.appendChild(actionCell);
                 tbody.appendChild(tr);
             });
+
+            renderGroceryDashboard();
         }
 
         document.getElementById('grocery-form').addEventListener('submit', function (e) {
