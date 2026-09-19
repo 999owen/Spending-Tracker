@@ -260,7 +260,7 @@
 
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 20px;
             margin-bottom: 25px;
         }
@@ -391,7 +391,11 @@
                         </div>
                         <div class="kpi-grid">
                             <div class="kpi-card">
-                                <h3>Total Spent</h3>
+                                <h3>Cumulative Total</h3>
+                                <div class="kpi-value" id="kpi-cumulative-total">$0.00</div>
+                            </div>
+                            <div class="kpi-card">
+                                <h3>Monthly Total</h3>
                                 <div class="kpi-value" id="kpi-total-spent">$0.00</div>
                             </div>
                             <div class="kpi-card">
@@ -476,6 +480,7 @@
             });
 
             // KPI Calculations
+            const cumulativeTotal = db.grocery_entries.reduce((sum, e) => sum + e.amount, 0);
             const totalSpent = monthEntries.reduce((sum, e) => sum + e.amount, 0);
             const transactionCount = monthEntries.length;
 
@@ -496,6 +501,7 @@
             const budgetRemaining = ((uniqueWeeks.length > 0 ? uniqueWeeks.length : 4) * groceryLimit) - totalSpent;
 
             // Update KPIs
+            document.getElementById('kpi-cumulative-total').textContent = moneyFormatter.format(cumulativeTotal);
             document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent);
             document.getElementById('kpi-weekly-avg').textContent = moneyFormatter.format(weeklyAvg);
 
