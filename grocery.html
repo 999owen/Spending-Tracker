@@ -403,7 +403,7 @@
                                 <div class="kpi-value" id="kpi-weekly-avg">$0.00</div>
                             </div>
                             <div class="kpi-card">
-                                <h3>Budget Remaining</h3>
+                                <h3>Weekly Grocery Left</h3>
                                 <div class="kpi-value" id="kpi-budget-remaining">$0.00</div>
                             </div>
                             <div class="kpi-card">
@@ -497,9 +497,8 @@
             const numWeeks = uniqueWeeks.length || 1; // avoid division by zero
             const weeklyAvg = totalSpent / numWeeks;
 
-            // Assuming typically ~4.33 weeks per month, but dynamic budget based on active weeks
-            // To be precise with user's settings, let's just use limit * active weeks or 4 if 0
-            const budgetRemaining = ((uniqueWeeks.length > 0 ? uniqueWeeks.length : 4) * groceryLimit) - totalSpent;
+            // Get weekly grocery left from store to match dashboard
+            const budgetRemaining = TrackerStore.summary(db).groceryLeft;
 
             // Update KPIs
             document.getElementById('kpi-cumulative-total').textContent = moneyFormatter.format(cumulativeTotal);
