@@ -401,6 +401,7 @@
             <div class="sidebar-logo"><i class="fas fa-coins"></i> Owen's Tracker</div>
             <a href="dashboard.html" class="sidebar-menu-item active"><i class="fas fa-th-large"></i> Dashboard</a>
             <a href="entries.html" class="sidebar-menu-item"><i class="fas fa-list"></i> Entries</a>
+            <a href="bills.html" class="sidebar-menu-item"><i class="fas fa-file-invoice-dollar"></i> Bills</a>
             <a href="grocery.html" class="sidebar-menu-item"><i class="fas fa-shopping-cart"></i> Groceries</a>
             
             <div style="margin-top: auto;">
@@ -441,6 +442,10 @@
                         <h3>Weekly Grocery Left</h3>
                         <div class="amount text-yellow" id="val-grocery-left">$0.00</div>
                     </div>
+                    <div class="card">
+                        <h3>Recurring Bills</h3>
+                        <div class="amount text-red" id="val-recurring-bills">$0.00</div>
+                    </div>
                 </div>
 
                 <div class="charts-grid">
@@ -459,6 +464,38 @@
                         </div>
                         <div class="chart-container">
                             <canvas id="groceryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div class="charts-grid" style="margin-top: 20px;">
+                    <div class="chart-panel">
+                        <div class="chart-panel-header">
+                            <h2>Recurring Costs Breakdown</h2>
+                        </div>
+                        <div class="chart-container" style="display: flex; justify-content: center; align-items: center;">
+                            <canvas id="billsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="panel" style="margin: 0; display: flex; flex-direction: column;">
+                        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h2 style="margin:0;">Upcoming Bills</h2>
+                            <a href="bills.html" style="color: var(--accent-blue); text-decoration: none; font-size: 14px;">Edit Bills</a>
+                        </div>
+                        <div style="flex: 1; overflow-y: auto; max-height: 300px;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 12px; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-weight: normal; font-size: 14px;">Name</th>
+                                        <th style="padding: 12px; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-weight: normal; font-size: 14px; text-align: right;">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="upcoming-bills-body">
+                                    <!-- JS populated -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -506,12 +543,13 @@
         </div>
     </div>
 
-    <script src="store.js?v=2"></script>
+    <script src="store.js?v=3"></script>
     <script>
         let db = TrackerStore.load();
 
         let spendingChartInstance = null;
         let groceryChartInstance = null;
+        let billsChartInstance = null;
 
         // Utility formatter - rebuilt on change so a currency switch takes effect
         let moneyFormatter = TrackerStore.formatter(db);
@@ -546,8 +584,81 @@
             renderTable('income-table-body', db.income_entries, 'income');
             renderTable('spend-table-body', db.spend_entries, 'spend');
 
+            // 3.5 Render Bills Data
+            renderBillsData();
+
             // 4. Update Charts
             updateCharts();
+        }
+
+        function renderBillsData() {
+            const tbody = document.getElementById('upcoming-bills-body');
+            tbody.innerHTML = '';
+
+            const currentMonth = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+            let dbUpdated = false;
+
+            (db.recurring_bills || []).forEach(bill => {
+                if (bill.type === 'variable' && bill.actualAmount !== null && bill.lastUpdatedMonth !== currentMonth) {
+                    bill.actualAmount = null;
+                    bill.lastUpdatedMonth = null;
+                    dbUpdated = true;
+                }
+            });
+
+            if (dbUpdated) {
+                TrackerStore.save(db, true);
+            }
+
+            const bills = (db.recurring_bills || []).filter(b => b.isActive).sort((a, b) => a.dueDay - b.dueDay);
+            let totalCommitted = 0;
+
+            if (bills.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="2" style="color: var(--text-muted); text-align: center; padding: 18px;">No active bills.</td>';
+                tbody.appendChild(tr);
+                document.getElementById('val-recurring-bills').textContent = moneyFormatter.format(0);
+                return;
+            }
+
+            bills.forEach(bill => {
+                let cost = bill.amount;
+                if (bill.type === 'variable' && bill.actualAmount !== null) {
+                    cost = bill.actualAmount;
+                }
+                totalCommitted += cost;
+
+                const tr = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                nameCell.style.padding = '12px';
+                nameCell.style.borderBottom = '1px solid var(--border-color)';
+                const nameDiv = document.createElement('div');
+                nameDiv.style.fontWeight = '600';
+                nameDiv.textContent = bill.name;
+                const dueDiv = document.createElement('div');
+                dueDiv.style.cssText = 'font-size: 11px; color: var(--text-muted); margin-top: 4px;';
+                dueDiv.textContent = `Due: Day ${bill.dueDay} | ${bill.type === 'fixed' ? 'Fixed' : 'Variable'}`;
+                nameCell.appendChild(nameDiv);
+                nameCell.appendChild(dueDiv);
+
+                const amountCell = document.createElement('td');
+                amountCell.style.padding = '12px';
+                amountCell.style.borderBottom = '1px solid var(--border-color)';
+                amountCell.style.textAlign = 'right';
+                amountCell.className = 'amount';
+                amountCell.textContent = moneyFormatter.format(cost);
+
+                tr.appendChild(nameCell);
+                tr.appendChild(amountCell);
+                tbody.appendChild(tr);
+            });
+
+            const totals = TrackerStore.summary(db);
+            const remainingDiscretionary = totals.remaining - totalCommitted;
+            const remainingText = moneyFormatter.format(remainingDiscretionary);
+
+            document.getElementById('val-recurring-bills').innerHTML = `${moneyFormatter.format(totalCommitted)}<div style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Runway: ${remainingText}</div>`;
         }
 
         function renderTable(tbodyId, dataArray, typeStr) {
@@ -716,6 +827,70 @@
                     }
                 }
             });
+
+            // -- Recurring Bills Chart --
+            const bills = (db.recurring_bills || []).filter(b => b.isActive);
+            let billLabels = [];
+            let billData = [];
+            let billColors = ['#60A5FA', '#4ADE80', '#F87171', '#FBBF24', '#A78BFA', '#F472B6', '#34D399', '#38BDF8'];
+            const currentMonthChart = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+
+            bills.forEach((bill, index) => {
+                billLabels.push(bill.name);
+                let cost = bill.amount;
+                if (bill.type === 'variable' && bill.actualAmount !== null && bill.lastUpdatedMonth === currentMonthChart) {
+                    cost = bill.actualAmount;
+                }
+                billData.push(cost);
+            });
+
+            if (billsChartInstance) billsChartInstance.destroy();
+            const ctxBills = document.getElementById('billsChart').getContext('2d');
+
+            if (bills.length > 0) {
+                billsChartInstance = new Chart(ctxBills, {
+                    type: 'doughnut',
+                    data: {
+                        labels: billLabels,
+                        datasets: [{
+                            data: billData,
+                            backgroundColor: billColors,
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#E6EDF3', font: { size: 11 }, padding: 10, boxWidth: 12 }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed !== null) {
+                                            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: db.settings.currency || 'USD' }).format(context.parsed);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '65%'
+                    }
+                });
+            } else {
+                // Draw a simple empty circle
+                billsChartInstance = new Chart(ctxBills, {
+                    type: 'doughnut',
+                    data: { labels: ['No Bills'], datasets: [{ data: [1], backgroundColor: ['#2D333B'], borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, cutout: '65%' }
+                });
+            }
         }
 
         // Stay in sync if another tab clears or imports data
