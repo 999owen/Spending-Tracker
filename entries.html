@@ -204,9 +204,10 @@
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
-        input[type="text"], input[type="number"], input[type="date"] {
+        input[type="text"], input[type="number"], input[type="date"], select {
             flex: 1;
             background-color: #1A1A1A;
             border: 1px solid var(--border-color);
@@ -219,14 +220,22 @@
 
         input[type="date"] {
             flex: 0.7;
+            min-width: 120px;
         }
         
         input[type="number"] {
             flex: 0.7;
+            min-width: 100px;
+        }
+
+        select {
+            flex: 1;
+            min-width: 150px;
         }
 
         input[type="text"] {
             flex: 1.5;
+            min-width: 150px;
         }
 
         ::-webkit-calendar-picker-indicator {
@@ -260,6 +269,42 @@
         button.neon-btn:hover {
             background-color: #1F2937;
             border-color: rgba(96, 165, 250, 0.4);
+        }
+
+        .quick-tags {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .quick-tag-btn {
+            background-color: #1A1A1A;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-tag-btn:hover {
+            background-color: #1F2937;
+            color: var(--text-main);
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+
+        .category-badge {
+            display: inline-block;
+            background-color: rgba(96, 165, 250, 0.1);
+            color: var(--accent-blue);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            margin-left: 8px;
+            font-weight: 600;
+            vertical-align: middle;
         }
 
         @media (max-width: 768px) {
@@ -304,7 +349,7 @@
             .input-group {
                 flex-direction: column;
             }
-            input[type="date"], input[type="number"], input[type="text"], button.neon-btn {
+            input[type="date"], input[type="number"], input[type="text"], select, button.neon-btn {
                 width: 100%;
                 box-sizing: border-box;
                 flex: none;
@@ -374,9 +419,27 @@
                             <h2>Spend Entries</h2>
                         </div>
 
+                        <div class="quick-tags">
+                            <button class="quick-tag-btn" onclick="applyQuickTag('Walmart', 'Groceries')">Walmart</button>
+                            <button class="quick-tag-btn" onclick="applyQuickTag('Takeout', 'Dining Out')">Takeout</button>
+                            <button class="quick-tag-btn" onclick="applyQuickTag('Gas/Fuel', 'Transit & Fuel')">Fuel</button>
+                            <button class="quick-tag-btn" onclick="applyQuickTag('Rent', 'Housing/Rent')">Rent</button>
+                        </div>
+
                         <form class="input-group" id="spend-form">
                             <input type="date" id="spd-date" required>
                             <input type="number" id="spd-amount" placeholder="Amount ($)" step="0.01" min="0.01" required>
+                            <select id="spd-category" required>
+                                <option value="" disabled selected>Category...</option>
+                                <option value="Groceries">Groceries</option>
+                                <option value="Dining Out">Dining Out</option>
+                                <option value="Housing/Rent">Housing/Rent</option>
+                                <option value="Utilities">Utilities</option>
+                                <option value="Transit & Fuel">Transit & Fuel</option>
+                                <option value="Student Loans">Student Loans</option>
+                                <option value="Discretionary / Personal">Discretionary / Personal</option>
+                                <option value="Household Supplies">Household Supplies</option>
+                            </select>
                             <input type="text" id="spd-notes" placeholder="Notes (e.g., Item / Vendor)" required>
                             <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
                         </form>
@@ -433,6 +496,12 @@
 
                 const notesCell = document.createElement('td');
                 notesCell.textContent = entry.notes;
+                if (entry.category) {
+                    const badge = document.createElement('span');
+                    badge.className = 'category-badge';
+                    badge.textContent = entry.category;
+                    notesCell.appendChild(badge);
+                }
 
                 const actionCell = document.createElement('td');
                 const btn = document.createElement('button');
@@ -464,20 +533,38 @@
             renderTable('spend-table-body', 'spend', '');
         }
 
+        function applyQuickTag(notes, category) {
+            const notesInput = document.getElementById('spd-notes');
+            const categoryInput = document.getElementById('spd-category');
+            if (notesInput) notesInput.value = notes;
+            if (categoryInput) categoryInput.value = category;
+        }
+
         function wireForm(formId, type, fieldPrefix) {
             document.getElementById(formId).addEventListener('submit', function (e) {
                 e.preventDefault();
                 try {
-                    db = TrackerStore.addEntry(type, {
+                    const entryData = {
                         date: document.getElementById(fieldPrefix + '-date').value,
                         amount: document.getElementById(fieldPrefix + '-amount').value,
                         notes: document.getElementById(fieldPrefix + '-notes').value
-                    });
+                    };
+
+                    const categoryEl = document.getElementById(fieldPrefix + '-category');
+                    if (categoryEl) {
+                        entryData.category = categoryEl.value;
+                    }
+
+                    db = TrackerStore.addEntry(type, entryData);
                 } catch (err) {
                     alert(err.message);
                     return;
                 }
                 this.reset();
+                // If it's the spend form, also reset the select manually to be safe
+                const categoryEl = document.getElementById(fieldPrefix + '-category');
+                if (categoryEl) categoryEl.value = '';
+
                 renderAll();
             });
         }

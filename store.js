@@ -8,7 +8,8 @@
 
     const DEFAULT_SETTINGS = {
         spending_percentage: 35,
-        weekly_grocery_limit: 75,
+        monthly_total_limit: 1000,
+        monthly_grocery_limit: 280,
         currency: 'USD',
         github_token: '',
         gist_id: ''
@@ -80,7 +81,8 @@
         const s = Object.assign({}, DEFAULT_SETTINGS, raw && typeof raw === 'object' ? raw : {});
         return {
             spending_percentage: clampNumber(s.spending_percentage, DEFAULT_SETTINGS.spending_percentage, 1, 100),
-            weekly_grocery_limit: clampNumber(s.weekly_grocery_limit, DEFAULT_SETTINGS.weekly_grocery_limit, 0.01, 1e9),
+            monthly_total_limit: clampNumber(s.monthly_total_limit, DEFAULT_SETTINGS.monthly_total_limit, 0.01, 1e9),
+            monthly_grocery_limit: clampNumber(s.monthly_grocery_limit, DEFAULT_SETTINGS.monthly_grocery_limit, 0.01, 1e9),
             // An unrecognised currency would make Intl.NumberFormat throw and blank every page.
             currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : DEFAULT_SETTINGS.currency,
             github_token: s.github_token ? String(s.github_token) : '',
@@ -98,11 +100,19 @@
             if (!e || typeof e !== 'object') { skipped++; return; }
             const amount = parseFloat(e.amount);
             if (!isValidDate(e.date) || !isFinite(amount) || amount <= 0) { skipped++; return; }
+
+            let category = e.category === undefined || e.category === null ? '' : String(e.category);
+            // Default missing categories to Groceries for backward compatibility
+            if (!category && (e.notes === undefined || !String(e.notes).toLowerCase().includes('income') && !String(e.notes).toLowerCase().includes('paycheck'))) {
+                category = 'Groceries';
+            }
+
             entries.push({
                 id: typeof e.id === 'string' && e.id ? e.id : newId(),
                 date: String(e.date),
                 amount: Math.round(amount * 100) / 100,
-                notes: e.notes === undefined || e.notes === null ? '' : String(e.notes)
+                notes: e.notes === undefined || e.notes === null ? '' : String(e.notes),
+                category: category
             });
         });
 
@@ -212,7 +222,8 @@
             id: newId(),
             date: String(entry.date),
             amount: Math.round(amount * 100) / 100,
-            notes: entry.notes ? String(entry.notes) : ''
+            notes: entry.notes ? String(entry.notes) : '',
+            category: entry.category ? String(entry.category) : (type === 'grocery' ? 'Groceries' : 'Discretionary / Personal')
         });
         return save(db);
     }
@@ -355,12 +366,21 @@
 
     // Every page derives its numbers from here so they cannot disagree.
     function summary(db) {
+        const allExpenses = getAllExpenses(db);
+
         const earned = sum(db.income_entries);
-        const spent = sum(db.spend_entries);
-        const grocery = sum(db.grocery_entries);
-        const totalSpent = spent;
+        const spent = sum(allExpenses.filter(e => e.entry_type === 'spend' && e.category !== 'Groceries'));
+        const grocery = sum(allExpenses.filter(e => e.entry_type === 'grocery' || e.category === 'Groceries'));
+        const totalSpent = spent; // excluding groceries based on old logic, but keeping allowance logic stable
         const allowance = earned * (db.settings.spending_percentage / 100);
         const thisWeek = weekKey(new Date());
+
+        const currentMonth = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+        const groceryThisMonth = sum(allExpenses.filter(e => {
+            if (e.entry_type !== 'grocery' && e.category !== 'Groceries') return false;
+            const d = parseDate(e.date);
+            return d && d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') === currentMonth;
+        }));
 
         return {
             earned: earned,
@@ -370,8 +390,8 @@
             allowance: allowance,
             remaining: allowance - totalSpent,
             saved: earned - allowance,
-            groceryThisWeek: groceryThisWeek(db),
-            groceryLeft: db.settings.weekly_grocery_limit - groceryThisWeek(db),
+            groceryThisMonth: groceryThisMonth,
+            groceryLeft: db.settings.monthly_grocery_limit - groceryThisMonth,
             thisWeekKey: thisWeek
         };
     }
@@ -380,16 +400,20 @@
     // in the list", which made a back-dated bill count as this week's.
     function groceryThisWeek(db) {
         const current = weekKey(new Date());
-        return sum(db.grocery_entries.filter(e => weekKey(e.date) === current));
+        const allExpenses = getAllExpenses(db);
+        return sum(allExpenses.filter(e => (e.entry_type === 'grocery' || e.category === 'Groceries') && weekKey(e.date) === current));
     }
 
     // Groups grocery entries into the last `count` calendar weeks, oldest first,
     // including weeks with no spending so the chart keeps a real time axis.
     function groceryByWeek(db, count) {
         const totals = {};
-        db.grocery_entries.forEach(e => {
-            const key = weekKey(e.date);
-            if (key) totals[key] = (totals[key] || 0) + e.amount;
+        const allExpenses = getAllExpenses(db);
+        allExpenses.forEach(e => {
+            if (e.entry_type === 'grocery' || e.category === 'Groceries') {
+                const key = weekKey(e.date);
+                if (key) totals[key] = (totals[key] || 0) + e.amount;
+            }
         });
 
         const weeks = [];
@@ -549,6 +573,16 @@
         });
     }
 
+    function getAllExpenses(db) {
+        // Groceries are tracked independently in grocery_entries for legacy reasons,
+        // but now we want to combine them with spend_entries for "All Expenses" view.
+        const all = [
+            ...db.spend_entries.map(e => Object.assign({}, e, { entry_type: 'spend' })),
+            ...db.grocery_entries.map(e => Object.assign({}, e, { entry_type: 'grocery', category: e.category || 'Groceries' }))
+        ];
+        return all.sort((a, b) => parseDate(a.date) - parseDate(b.date));
+    }
+
     global.TrackerStore = {
         STORAGE_KEY: STORAGE_KEY,
         SCHEMA_VERSION: SCHEMA_VERSION,
@@ -571,7 +605,8 @@
         formatter: formatter,
         markActiveNav: markActiveNav,
         pushToGist: pushToGist,
-        pullFromGist: pullFromGist
+        pullFromGist: pullFromGist,
+        getAllExpenses: getAllExpenses
     };
 
     // Auto-pull on load
