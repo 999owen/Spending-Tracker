@@ -21,7 +21,8 @@
         settings: Object.assign({}, DEFAULT_SETTINGS),
         income_entries: [],
         spend_entries: [],
-        grocery_entries: []
+        grocery_entries: [],
+        recurring_bills: []
     });
 
     function newId() {
@@ -119,6 +120,41 @@
         return { entries: entries, skipped: skipped };
     }
 
+
+    function normalizeBills(rawList) {
+        const bills = [];
+        let skipped = 0;
+
+        (Array.isArray(rawList) ? rawList : []).forEach(b => {
+            if (!b || typeof b !== 'object') { skipped++; return; }
+            const amount = parseFloat(b.amount);
+            if (!b.name || typeof b.name !== 'string' || !isFinite(amount) || amount < 0) { skipped++; return; }
+
+            let type = b.type === 'variable' ? 'variable' : 'fixed';
+            let dueDay = parseInt(b.dueDay);
+            if (isNaN(dueDay) || dueDay < 1 || dueDay > 31) {
+                dueDay = 1;
+            }
+
+            let actualAmount = b.actualAmount !== null && b.actualAmount !== undefined ? parseFloat(b.actualAmount) : null;
+            if (actualAmount !== null && !isFinite(actualAmount)) actualAmount = null;
+
+            bills.push({
+                id: typeof b.id === 'string' && b.id ? b.id : newId(),
+                name: String(b.name).trim(),
+                type: type,
+                amount: Math.round(amount * 100) / 100,
+                actualAmount: actualAmount !== null ? Math.round(actualAmount * 100) / 100 : null,
+                dueDay: dueDay,
+                isAutoPaid: !!b.isAutoPaid,
+                isActive: b.isActive !== undefined ? !!b.isActive : true,
+                lastUpdatedMonth: b.lastUpdatedMonth ? String(b.lastUpdatedMonth) : null
+            });
+        });
+
+        return { entries: bills, skipped: skipped };
+    }
+
     // Accepts anything and returns a valid db, reporting what it had to drop.
     function normalize(raw) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -141,6 +177,12 @@
             db[key] = result.entries;
             skipped += result.skipped;
         });
+
+        const rawBillsList = Array.isArray(raw.recurring_bills) ? raw.recurring_bills : [];
+        const billsResult = normalizeBills(rawBillsList);
+        if (rawBillsList.some(b => b && typeof b === 'object' && !b.id)) addedIds = true;
+        db.recurring_bills = billsResult.entries;
+        skipped += billsResult.skipped;
 
         return { db: db, skipped: skipped, addedIds: addedIds };
     }
@@ -583,6 +625,76 @@
         return all.sort((a, b) => parseDate(a.date) - parseDate(b.date));
     }
 
+    function addBill(bill) {
+        const amount = parseFloat(bill.amount);
+        if (!bill.name || !isFinite(amount) || amount < 0) throw new Error('Invalid bill data.');
+
+        const db = load();
+        let type = bill.type === 'variable' ? 'variable' : 'fixed';
+        let dueDay = parseInt(bill.dueDay);
+        if (isNaN(dueDay) || dueDay < 1 || dueDay > 31) dueDay = 1;
+
+        let actualAmount = bill.actualAmount !== null && bill.actualAmount !== undefined ? parseFloat(bill.actualAmount) : null;
+        if (actualAmount !== null && !isFinite(actualAmount)) actualAmount = null;
+
+        const newBill = {
+            id: newId(),
+            name: String(bill.name).trim(),
+            type: type,
+            amount: Math.round(amount * 100) / 100,
+            actualAmount: actualAmount !== null ? Math.round(actualAmount * 100) / 100 : null,
+            dueDay: dueDay,
+            isAutoPaid: !!bill.isAutoPaid,
+            isActive: bill.isActive !== undefined ? !!bill.isActive : true,
+            lastUpdatedMonth: bill.lastUpdatedMonth ? String(bill.lastUpdatedMonth) : null
+        };
+
+        db.recurring_bills.push(newBill);
+        save(db);
+        return newBill;
+    }
+
+    function updateBill(id, updates) {
+        const db = load();
+        const index = db.recurring_bills.findIndex(b => b.id === id);
+        if (index === -1) throw new Error('Bill not found.');
+
+        const b = db.recurring_bills[index];
+        if (updates.name !== undefined) b.name = String(updates.name).trim();
+        if (updates.type !== undefined) b.type = updates.type === 'variable' ? 'variable' : 'fixed';
+        if (updates.amount !== undefined) {
+            const amt = parseFloat(updates.amount);
+            if (isFinite(amt) && amt >= 0) b.amount = Math.round(amt * 100) / 100;
+        }
+        if (updates.actualAmount !== undefined) {
+            if (updates.actualAmount === null) {
+                b.actualAmount = null;
+            } else {
+                const actAmt = parseFloat(updates.actualAmount);
+                if (isFinite(actAmt)) b.actualAmount = Math.round(actAmt * 100) / 100;
+            }
+        }
+        if (updates.dueDay !== undefined) {
+            let dueDay = parseInt(updates.dueDay);
+            if (!isNaN(dueDay) && dueDay >= 1 && dueDay <= 31) b.dueDay = dueDay;
+            else b.dueDay = 1;
+        }
+        if (updates.isAutoPaid !== undefined) b.isAutoPaid = !!updates.isAutoPaid;
+        if (updates.isActive !== undefined) b.isActive = !!updates.isActive;
+        if (updates.lastUpdatedMonth !== undefined) b.lastUpdatedMonth = updates.lastUpdatedMonth ? String(updates.lastUpdatedMonth) : null;
+
+        save(db);
+    }
+
+    function deleteBill(id) {
+        const db = load();
+        const initialLength = db.recurring_bills.length;
+        db.recurring_bills = db.recurring_bills.filter(b => b.id !== id);
+        if (db.recurring_bills.length < initialLength) {
+            save(db);
+        }
+    }
+
     global.TrackerStore = {
         STORAGE_KEY: STORAGE_KEY,
         SCHEMA_VERSION: SCHEMA_VERSION,
@@ -606,7 +718,10 @@
         markActiveNav: markActiveNav,
         pushToGist: pushToGist,
         pullFromGist: pullFromGist,
-        getAllExpenses: getAllExpenses
+        getAllExpenses: getAllExpenses,
+        addBill: addBill,
+        updateBill: updateBill,
+        deleteBill: deleteBill
     };
 
     // Auto-pull on load
