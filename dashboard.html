@@ -539,7 +539,7 @@
 
             const groceryLeftEl = document.getElementById('val-grocery-left');
             groceryLeftEl.textContent = moneyFormatter.format(totals.groceryLeft);
-            // Keeps its usual yellow, but goes red once the weekly limit is blown
+            // Keeps its usual yellow, but goes red once the monthly limit is blown
             groceryLeftEl.className = 'amount ' + (totals.groceryLeft >= 0 ? 'text-yellow' : 'text-red');
 
             // 3. Render Tables (Limit to 5 most recent for dashboard)
@@ -644,10 +644,47 @@
             // -- Grocery Bar Chart --
             // Real calendar weeks, so a back-dated bill lands in the week it belongs to
             const weeks = TrackerStore.groceryByWeek(db, 4);
-            const groceryLimit = db.settings.weekly_grocery_limit;
-            let groceryData = weeks.map(w => w.total);
-            let groceryLabels = weeks.map(w => w.label);
-            let limitData = weeks.map(() => groceryLimit);
+            const monthlyGroceryLimit = db.settings.monthly_grocery_limit;
+
+            let cumulativeGrocerySpend = 0;
+            let groceryData = [];
+            let groceryLabels = [];
+            let backgroundColors = [];
+
+            let today = new Date();
+
+            weeks.forEach((w) => {
+                groceryLabels.push(w.label);
+                groceryData.push(w.total);
+
+                // For the main dashboard chart, only accumulate spend from weeks that fall in the current month
+                let weekDateStr = w.key;
+                let parsedDate = TrackerStore.parseDate(weekDateStr);
+
+                // Dashboard chart has 'This Week' mapped to the most recent week, so we need to fallback
+                if (!parsedDate && w.label === 'This Week') {
+                     parsedDate = today;
+                }
+
+                if (parsedDate && parsedDate.getMonth() === today.getMonth() && parsedDate.getFullYear() === today.getFullYear()) {
+                     cumulativeGrocerySpend += w.total;
+                } else if (parsedDate && (parsedDate.getMonth() !== today.getMonth() || parsedDate.getFullYear() !== today.getFullYear())) {
+                     // Evaluate against the total monthly limit
+                     let tempCum = w.total; // To be perfectly accurate we'd re-compute that whole month, but this prevents naive red bars
+                     if (tempCum > monthlyGroceryLimit) {
+                         backgroundColors.push('rgba(248, 113, 113, 0.9)'); // Red
+                     } else {
+                         backgroundColors.push('rgba(74, 222, 128, 0.8)'); // green
+                     }
+                     return;
+                }
+
+                if (cumulativeGrocerySpend > monthlyGroceryLimit) {
+                    backgroundColors.push('rgba(248, 113, 113, 0.9)'); // red
+                } else {
+                    backgroundColors.push('rgba(74, 222, 128, 0.8)'); // green
+                }
+            });
 
             if (groceryChartInstance) groceryChartInstance.destroy();
 
@@ -658,26 +695,12 @@
                     labels: groceryLabels,
                     datasets: [
                         {
-                            type: 'line',
-                            label: 'Limit (' + moneyFormatter.format(groceryLimit) + ')',
-                            data: limitData,
-                            borderColor: '#F87171',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false,
-                            order: 1
-                        },
-                        {
                             type: 'bar',
                             label: 'Spend ($)',
                             data: groceryData,
-                            backgroundColor: function(context) {
-                                const val = context.dataset.data[context.dataIndex];
-                                return val > groceryLimit ? 'rgba(248, 113, 113, 0.9)' : 'rgba(74, 222, 128, 0.8)';
-                            },
+                            backgroundColor: backgroundColors,
                             borderRadius: 4,
-                            order: 2
+                            order: 1
                         }
                     ]
                 },

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Groceries - Owen's Spending Tracker</title>
+    <title>Analytics - Owen's Spending Tracker</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -375,35 +375,44 @@
             <div class="main-dashboard-content">
                 
                 <div class="header">
-                    <h1>Grocery Tracker</h1>
+                    <h1>Analytics</h1>
                 </div>
 
                 <div class="panels-grid">
 
                     <div class="panel dashboard-panel">
                         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-                            <h2>Grocery Analytics</h2>
+                            <h2>Expense Analytics</h2>
                             <div class="month-nav">
+                                <select id="analytics-category-filter" style="margin-right: 15px; padding: 5px; background: #1A1A1A; color: #E6EDF3; border: 1px solid #2D333B; border-radius: 4px;">
+                                    <option value="All Expenses">All Expenses</option>
+                                    <option value="Groceries Only">Groceries Only</option>
+                                    <option value="Discretionary / Dining">Discretionary / Dining</option>
+                                </select>
                                 <button id="prev-month-btn" class="neon-btn"><i class="fas fa-chevron-left"></i></button>
                                 <span id="current-month-display" style="font-weight: bold; margin: 0 15px;">Loading...</span>
                                 <button id="next-month-btn" class="neon-btn"><i class="fas fa-chevron-right"></i></button>
                             </div>
                         </div>
                         <div class="kpi-grid">
-                            <div class="kpi-card">
-                                <h3>Cumulative Total</h3>
-                                <div class="kpi-value" id="kpi-cumulative-total">$0.00</div>
-                            </div>
-                            <div class="kpi-card">
-                                <h3>Monthly Total</h3>
+                            <div class="kpi-card" style="position: relative;">
+                                <h3>Monthly Spend vs Cap</h3>
                                 <div class="kpi-value" id="kpi-total-spent">$0.00</div>
+                                <div id="kpi-pct-badge" style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">0% of limit used</div>
+                                <div id="kpi-pacing-badge" style="font-size: 11px; padding: 2px 6px; border-radius: 12px; display: inline-block;">On Track</div>
                             </div>
                             <div class="kpi-card">
-                                <h3>Weekly Average</h3>
-                                <div class="kpi-value" id="kpi-weekly-avg">$0.00</div>
+                                <h3>14-Day Rolling Burn</h3>
+                                <div class="kpi-value" id="kpi-14-day-burn">$0.00<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span></div>
+                                <div id="kpi-14-day-target" style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Target: $0.00/day</div>
                             </div>
                             <div class="kpi-card">
-                                <h3>Weekly Grocery Left</h3>
+                                <h3>30-Day Rolling Burn</h3>
+                                <div class="kpi-value" id="kpi-30-day-burn">$0.00<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span></div>
+                                <div id="kpi-30-day-target" style="font-size: 11px; color: var(--text-muted); margin-top: 5px;">Target: $0.00/day</div>
+                            </div>
+                            <div class="kpi-card">
+                                <h3>Monthly Remaining</h3>
                                 <div class="kpi-value" id="kpi-budget-remaining">$0.00</div>
                             </div>
                             <div class="kpi-card">
@@ -460,9 +469,18 @@
         currentMonthDate.setDate(1); // Prevent month navigation overflow on the 31st
         let groceryChartInstance = null;
 
+        document.getElementById('analytics-category-filter').addEventListener('change', renderGroceryDashboard);
+
         function renderGroceryDashboard() {
             moneyFormatter = TrackerStore.formatter(db);
-            const groceryLimit = db.settings.weekly_grocery_limit;
+
+            const filterVal = document.getElementById('analytics-category-filter').value;
+            let activeLimit;
+            if (filterVal === 'Groceries Only') {
+                activeLimit = db.settings.monthly_grocery_limit;
+            } else {
+                activeLimit = db.settings.monthly_total_limit;
+            }
 
             // Format current month for display
             const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -470,20 +488,101 @@
             document.getElementById('current-month-display').textContent =
                 monthNames[currentMonthDate.getMonth()] + ' ' + currentMonthDate.getFullYear();
 
-            // Filter entries for the selected month
+            // All expenses combined and filtered
+            let allExpenses = TrackerStore.getAllExpenses(db);
+            if (filterVal === 'Groceries Only') {
+                allExpenses = allExpenses.filter(e => e.entry_type === 'grocery' || e.category === 'Groceries');
+            } else if (filterVal === 'Discretionary / Dining') {
+                allExpenses = allExpenses.filter(e => e.category === 'Dining Out' || e.category === 'Discretionary / Personal');
+            }
+
             const year = currentMonthDate.getFullYear();
             const month = currentMonthDate.getMonth();
 
-            const monthEntries = db.grocery_entries.filter(e => {
+            const monthEntries = allExpenses.filter(e => {
                 const d = TrackerStore.parseDate(e.date);
                 if (!d) return false;
                 return d.getFullYear() === year && d.getMonth() === month;
             });
 
-            // KPI Calculations
-            const cumulativeTotal = db.grocery_entries.reduce((sum, e) => sum + e.amount, 0);
+            // Calculate Rolling Burn (independent of the selected month display, always based on today)
+            const today = new Date();
+            today.setHours(0,0,0,0);
+
+            function getBurn(days) {
+                const cutoff = new Date(today);
+                cutoff.setDate(cutoff.getDate() - days);
+                const sum = allExpenses.reduce((acc, e) => {
+                    const d = TrackerStore.parseDate(e.date);
+                    if (d && d > cutoff && d <= today) return acc + e.amount;
+                    return acc;
+                }, 0);
+                return sum / days;
+            }
+
+            const burn14 = getBurn(14);
+            const burn30 = getBurn(30);
+
+            // KPI Calculations for selected month
             const totalSpent = monthEntries.reduce((sum, e) => sum + e.amount, 0);
             const transactionCount = monthEntries.length;
+            const budgetRemaining = activeLimit - totalSpent;
+
+            // Pacing (only applies if viewing current month)
+            const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+            let pacingText = '';
+            let pacingColor = '';
+            let pacingBg = '';
+
+            if (isCurrentMonth) {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const currentDay = today.getDate();
+                const pacedTarget = (currentDay / daysInMonth) * activeLimit;
+
+                if (totalSpent > pacedTarget) {
+                    pacingText = 'Over Pace';
+                    pacingColor = 'var(--accent-red)';
+                    pacingBg = 'rgba(248, 113, 113, 0.1)';
+                } else {
+                    pacingText = 'On Track';
+                    pacingColor = 'var(--accent-green)';
+                    pacingBg = 'rgba(74, 222, 128, 0.1)';
+                }
+            } else {
+                if (totalSpent > activeLimit) {
+                    pacingText = 'Over Budget';
+                    pacingColor = 'var(--accent-red)';
+                    pacingBg = 'rgba(248, 113, 113, 0.1)';
+                } else {
+                    pacingText = 'Under Budget';
+                    pacingColor = 'var(--accent-green)';
+                    pacingBg = 'rgba(74, 222, 128, 0.1)';
+                }
+            }
+
+            // Update KPIs
+            document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent);
+
+            const pctUsed = activeLimit > 0 ? (totalSpent / activeLimit) * 100 : 0;
+            document.getElementById('kpi-pct-badge').textContent = Math.round(pctUsed) + '% of limit used';
+
+            const badge = document.getElementById('kpi-pacing-badge');
+            badge.textContent = pacingText;
+            badge.style.color = pacingColor;
+            badge.style.backgroundColor = pacingBg;
+
+            document.getElementById('kpi-14-day-burn').innerHTML = moneyFormatter.format(burn14) + '<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span>';
+            document.getElementById('kpi-30-day-burn').innerHTML = moneyFormatter.format(burn30) + '<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span>';
+
+            const targetBurn = activeLimit / 30; // approx
+            document.getElementById('kpi-14-day-target').textContent = 'Target: \u2264 ' + moneyFormatter.format(targetBurn) + '/day';
+            document.getElementById('kpi-30-day-target').textContent = 'Target: \u2264 ' + moneyFormatter.format(targetBurn) + '/day';
+
+            const kpiBudget = document.getElementById('kpi-budget-remaining');
+            kpiBudget.textContent = moneyFormatter.format(budgetRemaining);
+            kpiBudget.style.color = budgetRemaining < 0 ? 'var(--accent-red)' : 'var(--text-main)';
+
+            document.getElementById('kpi-transaction-count').textContent = transactionCount;
 
             // Group by week using TrackerStore.weekKey
             const weekTotals = {};
@@ -491,42 +590,34 @@
                 const key = TrackerStore.weekKey(e.date);
                 if (key) weekTotals[key] = (weekTotals[key] || 0) + e.amount;
             });
-
-            // For weekly average, determine active weeks in month or use all weeks
             const uniqueWeeks = Object.keys(weekTotals).sort();
-            const numWeeks = uniqueWeeks.length || 1; // avoid division by zero
-            const weeklyAvg = totalSpent / numWeeks;
-
-            // Get weekly grocery left from store to match dashboard
-            const budgetRemaining = TrackerStore.summary(db).groceryLeft;
-
-            // Update KPIs
-            document.getElementById('kpi-cumulative-total').textContent = moneyFormatter.format(cumulativeTotal);
-            document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent);
-            document.getElementById('kpi-weekly-avg').textContent = moneyFormatter.format(weeklyAvg);
-
-            const kpiBudget = document.getElementById('kpi-budget-remaining');
-            kpiBudget.textContent = moneyFormatter.format(budgetRemaining);
-            kpiBudget.style.color = budgetRemaining < 0 ? 'var(--accent-red)' : 'var(--accent-green)';
-
-            document.getElementById('kpi-transaction-count').textContent = transactionCount;
 
             // Prepare Chart Data
             const labels = [];
             const data = [];
             const backgroundColors = [];
+            const trendData = [];
 
             if (uniqueWeeks.length === 0) {
                 labels.push("No data");
                 data.push(0);
                 backgroundColors.push('rgba(96, 165, 250, 0.6)');
+                trendData.push(0);
             } else {
+                let cumulativeSpend = 0;
+
                 uniqueWeeks.forEach(wk => {
                     const total = weekTotals[wk];
+                    cumulativeSpend += total;
                     labels.push(wk);
                     data.push(total);
-                    // Color red if over weekly limit
-                    if (total > groceryLimit) {
+
+                    // Simple moving average for trend line
+                    trendData.push(cumulativeSpend / labels.length);
+
+                    // Color bar red ONLY if the cumulative spend exceeds the total monthly limit.
+                    // Strict daily pacing on a weekly chart flags isolated bulk buys incorrectly.
+                    if (cumulativeSpend > activeLimit) {
                         backgroundColors.push('rgba(248, 113, 113, 0.8)'); // red
                     } else {
                         backgroundColors.push('rgba(96, 165, 250, 0.8)'); // blue
@@ -542,10 +633,8 @@
                 groceryChartInstance.data.datasets[0].data = data;
                 groceryChartInstance.data.datasets[0].backgroundColor = backgroundColors;
 
-                // Keep the limit line updated if it exists
                 if (groceryChartInstance.data.datasets[1]) {
-                    groceryChartInstance.data.datasets[1].data = labels.map(() => groceryLimit);
-                    groceryChartInstance.data.datasets[1].label = 'Limit (' + moneyFormatter.format(groceryLimit) + ')';
+                    groceryChartInstance.data.datasets[1].data = trendData;
                 }
 
                 groceryChartInstance.update();
@@ -557,7 +646,7 @@
                         datasets: [
                             {
                                 type: 'bar',
-                                label: 'Spend ($)',
+                                label: 'Weekly Spend ($)',
                                 data: data,
                                 backgroundColor: backgroundColors,
                                 borderRadius: 4,
@@ -565,12 +654,13 @@
                             },
                             {
                                 type: 'line',
-                                label: 'Limit (' + moneyFormatter.format(groceryLimit) + ')',
-                                data: labels.map(() => groceryLimit),
-                                borderColor: '#F87171',
+                                label: 'Trend (Avg/Wk)',
+                                data: trendData,
+                                borderColor: '#FBBF24', // yellow
                                 borderWidth: 2,
                                 borderDash: [5, 5],
                                 pointRadius: 0,
+                                tension: 0.3,
                                 fill: false,
                                 order: 1
                             }
