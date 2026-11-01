@@ -55,11 +55,11 @@
         }
 
         .sidebar-logo {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 700;
             color: var(--accent-blue);
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 2px;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
@@ -448,22 +448,13 @@
                     </div>
                 </div>
 
-                <div class="charts-grid">
+                <div class="charts-grid" style="grid-template-columns: 1fr;">
                     <div class="chart-panel">
                         <div class="chart-panel-header">
-                            <h2>Cumulative Spending Trend (Excl. Groceries)</h2>
+                            <h2>Weekly Spending Trend</h2>
                         </div>
                         <div class="chart-container">
                             <canvas id="spendingChart"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="chart-panel">
-                        <div class="chart-panel-header">
-                            <h2>Weekly Grocery Spend</h2>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="groceryChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -701,117 +692,46 @@
 
         // Charting Logic
         function updateCharts() {
-            // -- Cumulative Chart --
-            // Include only discretionary spending, sort by date, calculate cumulative
-            let allSpending = [...db.spend_entries]
-                .sort((a, b) => TrackerStore.parseDate(a.date) - TrackerStore.parseDate(b.date));
+            // -- Weekly Spending Breakdown Chart --
+            const weeks = TrackerStore.expensesByWeek(db, 4);
+            const labels = [];
+            const costData = [];
+            const personalData = [];
+            const groceryData = [];
 
-            let cumulativeData = [];
-            let cumulativeLabels = [];
-            let currentTotal = 0;
-
-            allSpending.forEach((entry) => {
-                currentTotal += entry.amount;
-                cumulativeData.push(currentTotal);
-                cumulativeLabels.push(entry.notes || entry.date);
+            weeks.forEach(w => {
+                labels.push(w.label);
+                costData.push(w.costTotal);
+                personalData.push(w.personalTotal);
+                groceryData.push(w.groceryTotal);
             });
 
             if (spendingChartInstance) spendingChartInstance.destroy();
 
             const ctxMain = document.getElementById('spendingChart').getContext('2d');
-            const mainChartGradient = ctxMain.createLinearGradient(0, 0, 0, 300);
-            mainChartGradient.addColorStop(0, 'rgba(96, 165, 250, 0.2)');
-            mainChartGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
             spendingChartInstance = new Chart(ctxMain, {
-                type: 'line', 
-                data: {
-                    labels: cumulativeLabels, 
-                    datasets: [{
-                        label: 'Cumulative Spend (Excl. Groceries)',
-                        data: cumulativeData, 
-                        borderColor: '#60A5FA',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#4ADE80',
-                        pointBorderColor: '#000',
-                        pointRadius: 8,
-                        pointHoverRadius: 10,
-                        tension: 0.2, 
-                        fill: true,
-                        backgroundColor: mainChartGradient
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false, 
-                    plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(16, 16, 16, 0.9)', titleColor: '#fff', bodyColor: '#fff' } },
-                    scales: {
-                        x: { display: false },
-                        y: { display: true, grid: { color: '#2D333B' }, ticks: { color: '#8B949E' } }
-                    }
-                }
-            });
-
-            // -- Grocery Bar Chart --
-            // Real calendar weeks, so a back-dated bill lands in the week it belongs to
-            const weeks = TrackerStore.groceryByWeek(db, 4);
-            const monthlyGroceryLimit = db.settings.monthly_grocery_limit;
-
-            let cumulativeGrocerySpend = 0;
-            let groceryData = [];
-            let groceryLabels = [];
-            let backgroundColors = [];
-
-            let today = new Date();
-
-            weeks.forEach((w) => {
-                groceryLabels.push(w.label);
-                groceryData.push(w.total);
-
-                // For the main dashboard chart, only accumulate spend from weeks that fall in the current month
-                let weekDateStr = w.key;
-                let parsedDate = TrackerStore.parseDate(weekDateStr);
-
-                // Dashboard chart has 'This Week' mapped to the most recent week, so we need to fallback
-                if (!parsedDate && w.label === 'This Week') {
-                     parsedDate = today;
-                }
-
-                if (parsedDate && parsedDate.getMonth() === today.getMonth() && parsedDate.getFullYear() === today.getFullYear()) {
-                     cumulativeGrocerySpend += w.total;
-                } else if (parsedDate && (parsedDate.getMonth() !== today.getMonth() || parsedDate.getFullYear() !== today.getFullYear())) {
-                     // Evaluate against the total monthly limit
-                     let tempCum = w.total; // To be perfectly accurate we'd re-compute that whole month, but this prevents naive red bars
-                     if (tempCum > monthlyGroceryLimit) {
-                         backgroundColors.push('rgba(248, 113, 113, 0.9)'); // Red
-                     } else {
-                         backgroundColors.push('rgba(74, 222, 128, 0.8)'); // green
-                     }
-                     return;
-                }
-
-                if (cumulativeGrocerySpend > monthlyGroceryLimit) {
-                    backgroundColors.push('rgba(248, 113, 113, 0.9)'); // red
-                } else {
-                    backgroundColors.push('rgba(74, 222, 128, 0.8)'); // green
-                }
-            });
-
-            if (groceryChartInstance) groceryChartInstance.destroy();
-
-            const ctxGrocery = document.getElementById('groceryChart').getContext('2d');
-            groceryChartInstance = new Chart(ctxGrocery, {
                 type: 'bar',
                 data: {
-                    labels: groceryLabels,
+                    labels: labels,
                     datasets: [
                         {
-                            type: 'bar',
-                            label: 'Spend ($)',
+                            label: 'Cost',
+                            data: costData,
+                            backgroundColor: 'rgba(96, 165, 250, 0.8)', // blue
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Personal Spend',
+                            data: personalData,
+                            backgroundColor: 'rgba(251, 191, 36, 0.8)', // yellow
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Grocery',
                             data: groceryData,
-                            backgroundColor: backgroundColors,
-                            borderRadius: 4,
-                            order: 1
+                            backgroundColor: 'rgba(74, 222, 128, 0.8)', // green
+                            borderRadius: 4
                         }
                     ]
                 },
@@ -819,11 +739,39 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: true, labels: { color: '#8B949E', boxWidth: 12 } },
+                        legend: {
+                            display: true,
+                            labels: { color: '#8B949E', boxWidth: 12 }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(16, 16, 16, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += moneyFormatter.format(context.parsed.y);
+                                    }
+                                    return label;
+                                },
+                                afterBody: function(tooltipItems) {
+                                    let sum = 0;
+                                    tooltipItems.forEach(item => {
+                                        const weekIndex = item.dataIndex;
+                                        sum = costData[weekIndex] + personalData[weekIndex] + groceryData[weekIndex];
+                                    });
+                                    return '\nWeekly Total: ' + moneyFormatter.format(sum);
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        x: { grid: { display: false }, ticks: { color: '#8B949E' } },
-                        y: { grid: { color: '#2D333B' }, ticks: { color: '#8B949E' }, beginAtZero: true }
+                        x: { display: true, grid: { display: false }, ticks: { color: '#8B949E' } },
+                        y: { display: true, grid: { color: '#2D333B' }, ticks: { color: '#8B949E' }, beginAtZero: true }
                     }
                 }
             });

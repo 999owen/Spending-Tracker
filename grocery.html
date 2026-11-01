@@ -575,7 +575,8 @@
             document.getElementById('kpi-14-day-burn').innerHTML = moneyFormatter.format(burn14) + '<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span>';
             document.getElementById('kpi-30-day-burn').innerHTML = moneyFormatter.format(burn30) + '<span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">/day</span>';
 
-            const targetBurn = activeLimit / 30; // approx
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const targetBurn = activeLimit / daysInMonth;
             document.getElementById('kpi-14-day-target').textContent = 'Target: \u2264 ' + moneyFormatter.format(targetBurn) + '/day';
             document.getElementById('kpi-30-day-target').textContent = 'Target: \u2264 ' + moneyFormatter.format(targetBurn) + '/day';
 

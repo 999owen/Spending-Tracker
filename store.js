@@ -104,8 +104,11 @@
 
             let category = e.category === undefined || e.category === null ? '' : String(e.category);
             // Default missing categories to Groceries for backward compatibility
-            if (!category && (e.notes === undefined || !String(e.notes).toLowerCase().includes('income') && !String(e.notes).toLowerCase().includes('paycheck'))) {
+            if (!category && (e.notes === undefined || (!String(e.notes).toLowerCase().includes('income') && !String(e.notes).toLowerCase().includes('paycheck')))) {
                 category = 'Groceries';
+            } else if (category && !['Groceries', 'Cost', 'Personal Spend'].includes(category)) {
+                // Fallback legacy entries
+                category = 'Personal Spend';
             }
 
             entries.push({
@@ -476,6 +479,47 @@
         return weeks;
     }
 
+    function expensesByWeek(db, count) {
+        const totals = {};
+        const allExpenses = getAllExpenses(db);
+        allExpenses.forEach(e => {
+            const key = weekKey(e.date);
+            if (!key) return;
+
+            if (!totals[key]) {
+                totals[key] = { cost: 0, personal: 0, grocery: 0 };
+            }
+
+            if (e.entry_type === 'grocery' || e.category === 'Groceries') {
+                totals[key].grocery += e.amount;
+            } else if (e.category === 'Cost') {
+                totals[key].cost += e.amount;
+            } else {
+                totals[key].personal += e.amount;
+            }
+        });
+
+        const weeks = [];
+        const currentKey = weekKey(new Date());
+        const cursor = parseDate(currentKey);
+        if (!cursor) return weeks;
+        for (let i = 0; i < count; i++) {
+            const key = cursor.getFullYear() + '-' +
+                String(cursor.getMonth() + 1).padStart(2, '0') + '-' +
+                String(cursor.getDate()).padStart(2, '0');
+
+            weeks.unshift({
+                key: key,
+                label: i === 0 ? 'This Week' : (cursor.getMonth() + 1) + '/' + cursor.getDate(),
+                costTotal: totals[key] ? totals[key].cost : 0,
+                personalTotal: totals[key] ? totals[key].personal : 0,
+                groceryTotal: totals[key] ? totals[key].grocery : 0
+            });
+            cursor.setDate(cursor.getDate() - 7);
+        }
+        return weeks;
+    }
+
     function formatter(db) {
         const currency = (db.settings && db.settings.currency) || 'USD';
         try {
@@ -712,6 +756,7 @@
         counts: counts,
         summary: summary,
         groceryByWeek: groceryByWeek,
+        expensesByWeek: expensesByWeek,
         weekKey: weekKey,
         parseDate: parseDate,
         formatter: formatter,
