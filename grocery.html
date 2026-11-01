@@ -383,13 +383,8 @@
 
                     <div class="panel dashboard-panel">
                         <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
-                            <h2>Expense Analytics</h2>
+                            <h2>Groceries</h2>
                             <div class="month-nav">
-                                <select id="analytics-category-filter" style="margin-right: 15px; padding: 5px; background: #1A1A1A; color: #E6EDF3; border: 1px solid #2D333B; border-radius: 4px;">
-                                    <option value="All Expenses">All Expenses</option>
-                                    <option value="Groceries Only">Groceries Only</option>
-                                    <option value="Discretionary / Dining">Discretionary / Dining</option>
-                                </select>
                                 <button id="prev-month-btn" class="neon-btn"><i class="fas fa-chevron-left"></i></button>
                                 <span id="current-month-display" style="font-weight: bold; margin: 0 15px;">Loading...</span>
                                 <button id="next-month-btn" class="neon-btn"><i class="fas fa-chevron-right"></i></button>
@@ -470,18 +465,10 @@
         currentMonthDate.setDate(1); // Prevent month navigation overflow on the 31st
         let groceryChartInstance = null;
 
-        document.getElementById('analytics-category-filter').addEventListener('change', renderGroceryDashboard);
-
         function renderGroceryDashboard() {
             moneyFormatter = TrackerStore.formatter(db);
 
-            const filterVal = document.getElementById('analytics-category-filter').value;
-            let activeLimit;
-            if (filterVal === 'Groceries Only') {
-                activeLimit = db.settings.monthly_grocery_limit;
-            } else {
-                activeLimit = db.settings.monthly_total_limit;
-            }
+            let activeLimit = db.settings.monthly_grocery_limit;
 
             // Format current month for display
             const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -491,11 +478,7 @@
 
             // All expenses combined and filtered
             let allExpenses = TrackerStore.getAllExpenses(db);
-            if (filterVal === 'Groceries Only') {
-                allExpenses = allExpenses.filter(e => e.entry_type === 'grocery' || e.category === 'Groceries');
-            } else if (filterVal === 'Discretionary / Dining') {
-                allExpenses = allExpenses.filter(e => e.category === 'Dining Out' || e.category === 'Discretionary / Personal');
-            }
+            allExpenses = allExpenses.filter(e => e.entry_type === 'grocery' || e.category === 'Groceries');
 
             const year = currentMonthDate.getFullYear();
             const month = currentMonthDate.getMonth();
@@ -562,7 +545,7 @@
             }
 
             // Update KPIs
-            document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent);
+            document.getElementById('kpi-total-spent').textContent = moneyFormatter.format(totalSpent) + ' / ' + moneyFormatter.format(activeLimit);
 
             const pctUsed = activeLimit > 0 ? (totalSpent / activeLimit) * 100 : 0;
             document.getElementById('kpi-pct-badge').textContent = Math.round(pctUsed) + '% of limit used';

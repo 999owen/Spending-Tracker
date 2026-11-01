@@ -337,16 +337,6 @@
 
                         <div class="setting-row">
                             <div class="setting-info">
-                                <h3>Monthly Total Limit</h3>
-                                <p>Set your overall monthly budget cap for all expenses.</p>
-                            </div>
-                            <div>
-                                $<input type="number" id="set-monthly-total-limit" value="1000" min="1">
-                            </div>
-                        </div>
-                        
-                        <div class="setting-row">
-                            <div class="setting-info">
                                 <h3>Currency Display</h3>
                                 <p>Format used for dashboard values.</p>
                             </div>
@@ -462,7 +452,6 @@
         // --- Preferences: load current values, save on change ---
         const pctInput = document.getElementById('set-spending-pct');
         const monthlyGroceryLimitInput = document.getElementById('set-monthly-grocery-limit');
-        const monthlyTotalLimitInput = document.getElementById('set-monthly-total-limit');
         const currencySelect = document.getElementById('set-currency');
         const tokenInput = document.getElementById('set-github-token');
         const gistIdInput = document.getElementById('set-gist-id');
@@ -470,7 +459,6 @@
         function loadSettingsIntoForm() {
             pctInput.value = db.settings.spending_percentage;
             monthlyGroceryLimitInput.value = db.settings.monthly_grocery_limit;
-            monthlyTotalLimitInput.value = db.settings.monthly_total_limit;
             currencySelect.value = db.settings.currency;
             tokenInput.value = db.settings.github_token;
             gistIdInput.value = db.settings.gist_id;
@@ -489,7 +477,6 @@
 
         pctInput.addEventListener('change', () => applySetting('spending_percentage', pctInput.value));
         monthlyGroceryLimitInput.addEventListener('change', () => applySetting('monthly_grocery_limit', monthlyGroceryLimitInput.value));
-        monthlyTotalLimitInput.addEventListener('change', () => applySetting('monthly_total_limit', monthlyTotalLimitInput.value));
         currencySelect.addEventListener('change', () => applySetting('currency', currencySelect.value));
         tokenInput.addEventListener('change', () => applySetting('github_token', tokenInput.value));
         gistIdInput.addEventListener('change', () => applySetting('gist_id', gistIdInput.value));
