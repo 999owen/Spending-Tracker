@@ -45,16 +45,21 @@
         }
 
         .sidebar-logo {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--accent-blue);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+        .logo-icon {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
 
         .sidebar-menu-item {
             display: flex;
@@ -290,7 +295,10 @@
     <div class="main-container">
         
         <div class="sidebar">
-            <div class="sidebar-logo"><i class="fas fa-coins"></i> Outflow</div>
+            <div class="sidebar-logo">
+    <img src="logo.svg" alt="Outflow" class="logo-icon">
+    Outflow
+</div>
             <a href="dashboard.html" class="sidebar-menu-item"><i class="fas fa-th-large"></i> Dashboard</a>
             <a href="entries.html" class="sidebar-menu-item"><i class="fas fa-list"></i> Entries</a>
             <a href="bills.html" class="sidebar-menu-item"><i class="fas fa-file-invoice-dollar"></i> Bills</a>
