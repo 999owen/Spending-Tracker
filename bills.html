@@ -685,6 +685,7 @@
                 amtSpan.textContent = moneyFormatter.format(cost);
 
                 amtDiv.appendChild(amtSpan);
+                right.appendChild(amtDiv);
 
                 if (bill.type === 'variable') {
                     // Actual amount logic
@@ -762,7 +763,6 @@
                 actions.appendChild(editBtn);
                 actions.appendChild(delBtn);
 
-                right.appendChild(amtDiv);
                 right.appendChild(actions);
 
                 card.appendChild(left);
