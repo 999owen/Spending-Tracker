@@ -182,6 +182,48 @@
             border-bottom: none;
         }
 
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            position: relative;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            transition: border-color 0.2s var(--ease-in-out);
+        }
+
+        .card:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+
+        .card h3 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .card .amount {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .text-green { color: var(--accent-green); }
+        .text-red { color: var(--accent-red); }
+        .text-yellow { color: var(--accent-yellow); }
+
         /* Delete Button Styling */
         .delete-btn {
             background: none;
@@ -305,6 +347,16 @@
             margin-left: 8px;
             font-weight: 600;
             vertical-align: middle;
+        }
+
+        .category-badge.fixed {
+            background-color: rgba(96, 165, 250, 0.1);
+            color: var(--accent-blue);
+        }
+
+        .category-badge.variable {
+            background-color: rgba(251, 191, 36, 0.1);
+            color: var(--accent-yellow);
         }
 
         @media (max-width: 768px) {
@@ -455,18 +507,22 @@
             </div>
 
             <!-- Summary Banner -->
-            <div style="display: flex; gap: 20px; margin-bottom: 25px; flex-wrap: wrap;">
-                <div class="card" style="flex: 1; min-width: 200px;">
-                    <div style="font-size: 14px; color: var(--text-muted);">Total Fixed</div>
-                    <div id="summary-fixed" class="amount" style="font-size: 28px; margin-top: 5px;">$0.00</div>
+            <div class="summary-grid">
+                <div class="card">
+                    <h3>Total Fixed</h3>
+                    <div id="summary-fixed" class="amount">$0.00</div>
                 </div>
-                <div class="card" style="flex: 1; min-width: 200px;">
-                    <div style="font-size: 14px; color: var(--text-muted);">Total Variable</div>
-                    <div id="summary-variable" class="amount" style="font-size: 28px; margin-top: 5px;">$0.00</div>
+                <div class="card">
+                    <h3>Total Variable</h3>
+                    <div id="summary-variable" class="amount">$0.00</div>
                 </div>
-                <div class="card" style="flex: 1; min-width: 200px; border-top: 3px solid var(--accent-red);">
-                    <div style="font-size: 14px; color: var(--text-muted);">Projected Monthly</div>
-                    <div id="summary-projected" class="amount text-red" style="font-size: 28px; margin-top: 5px;">$0.00</div>
+                <div class="card" style="border-top: 3px solid var(--accent-red);">
+                    <h3>Projected Monthly</h3>
+                    <div id="summary-projected" class="amount text-red">$0.00</div>
+                </div>
+                <div class="card" style="border-top: 3px solid var(--accent-yellow);">
+                    <h3>Next Bill Due</h3>
+                    <div id="summary-next-bill" class="amount text-yellow" style="font-size: 18px;">None</div>
                 </div>
             </div>
 
@@ -603,12 +659,15 @@
                 const meta = document.createElement('div');
                 meta.style.fontSize = '12px';
                 meta.style.color = 'var(--text-muted)';
-                meta.style.marginTop = '4px';
+                meta.style.marginTop = '6px';
+                meta.style.display = 'flex';
+                meta.style.alignItems = 'center';
+                meta.style.gap = '6px';
 
-                let typeBadge = bill.type === 'fixed' ? '<span style="color: var(--accent-blue);">Fixed</span>' : '<span style="color: var(--accent-yellow);">Variable</span>';
-                let autoBadge = bill.isAutoPaid ? ' | Auto-paid' : '';
+                let typeBadge = bill.type === 'fixed' ? '<span class="category-badge fixed">Fixed</span>' : '<span class="category-badge variable">Variable</span>';
+                let autoBadge = bill.isAutoPaid ? ' <span style="font-size: 11px;">| Auto-paid</span>' : '';
 
-                meta.innerHTML = `Due: Day ${bill.dueDay} | ${typeBadge}${autoBadge}`;
+                meta.innerHTML = `<span>Due: Day ${bill.dueDay}</span> ${typeBadge} ${autoBadge}`;
 
                 left.appendChild(title);
                 left.appendChild(meta);
@@ -628,14 +687,34 @@
                 amtDiv.appendChild(amtSpan);
 
                 if (bill.type === 'variable') {
+                    // Actual amount logic
+                    const actualDiv = document.createElement('div');
+                    actualDiv.style.textAlign = 'right';
+
+                    const actualSpan = document.createElement('div');
+                    actualSpan.className = 'amount';
+                    if (bill.actualAmount !== null) {
+                        actualSpan.textContent = moneyFormatter.format(bill.actualAmount);
+                    } else {
+                        actualSpan.textContent = 'TBD';
+                        actualSpan.style.color = 'var(--accent-yellow)';
+                    }
+                    actualDiv.appendChild(actualSpan);
+
+                    const actualLabel = document.createElement('div');
+                    actualLabel.style.fontSize = '11px';
+                    actualLabel.style.color = 'var(--text-muted)';
+                    actualLabel.textContent = 'Actual';
+                    actualDiv.appendChild(actualLabel);
+
+                    // Insert Actual div before Est div
+                    right.insertBefore(actualDiv, amtDiv);
+
+                    // Update estimated span
                     const estSpan = document.createElement('div');
                     estSpan.style.fontSize = '11px';
                     estSpan.style.color = 'var(--text-muted)';
-                    if (bill.actualAmount !== null) {
-                        estSpan.textContent = `Est: ${moneyFormatter.format(bill.amount)}`;
-                    } else {
-                        estSpan.textContent = 'Estimated';
-                    }
+                    estSpan.textContent = 'Estimated';
                     amtDiv.appendChild(estSpan);
 
                     const updateBtn = document.createElement('button');
@@ -645,7 +724,7 @@
                     updateBtn.style.background = 'transparent';
                     updateBtn.style.border = '1px solid var(--accent-yellow)';
                     updateBtn.style.color = 'var(--accent-yellow)';
-                    updateBtn.textContent = 'Actual';
+                    updateBtn.textContent = 'Confirm';
                     updateBtn.onclick = () => openActualModal(bill);
                     right.appendChild(updateBtn);
                 }
@@ -694,6 +773,34 @@
             document.getElementById('summary-fixed').textContent = moneyFormatter.format(totalFixed);
             document.getElementById('summary-variable').textContent = moneyFormatter.format(totalVariable);
             document.getElementById('summary-projected').textContent = moneyFormatter.format(projected);
+
+            // Compute Next Bill
+            const now = new Date();
+            const todayDate = now.getDate();
+            const activeBills = bills.filter(b => b.isActive);
+            let nextBill = null;
+
+            if (activeBills.length > 0) {
+                // Find next bill this month
+                const upcoming = activeBills.filter(b => b.dueDay >= todayDate);
+                if (upcoming.length > 0) {
+                    nextBill = upcoming[0];
+                } else {
+                    // Next bill is next month
+                    nextBill = activeBills[0];
+                }
+            }
+
+            const nextBillEl = document.getElementById('summary-next-bill');
+            if (nextBill) {
+                let cost = nextBill.amount;
+                if (nextBill.type === 'variable' && nextBill.actualAmount !== null) {
+                    cost = nextBill.actualAmount;
+                }
+                nextBillEl.innerHTML = `${nextBill.name}<div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">${moneyFormatter.format(cost)} (Day ${nextBill.dueDay})</div>`;
+            } else {
+                nextBillEl.textContent = 'None';
+            }
         }
 
         // Modals

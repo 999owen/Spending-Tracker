@@ -420,26 +420,13 @@
                             <h2>Spend Entries</h2>
                         </div>
 
-                        <div class="quick-tags">
-                            <button class="quick-tag-btn" onclick="applyQuickTag('Walmart', 'Groceries')">Walmart</button>
-                            <button class="quick-tag-btn" onclick="applyQuickTag('Takeout', 'Dining Out')">Takeout</button>
-                            <button class="quick-tag-btn" onclick="applyQuickTag('Gas/Fuel', 'Transit & Fuel')">Fuel</button>
-                            <button class="quick-tag-btn" onclick="applyQuickTag('Rent', 'Housing/Rent')">Rent</button>
-                        </div>
-
                         <form class="input-group" id="spend-form">
                             <input type="date" id="spd-date" required>
                             <input type="number" id="spd-amount" placeholder="Amount ($)" step="0.01" min="0.01" required>
                             <select id="spd-category" required>
                                 <option value="" disabled selected>Category...</option>
-                                <option value="Groceries">Groceries</option>
-                                <option value="Dining Out">Dining Out</option>
-                                <option value="Housing/Rent">Housing/Rent</option>
-                                <option value="Utilities">Utilities</option>
-                                <option value="Transit & Fuel">Transit & Fuel</option>
-                                <option value="Student Loans">Student Loans</option>
-                                <option value="Discretionary / Personal">Discretionary / Personal</option>
-                                <option value="Household Supplies">Household Supplies</option>
+                                <option value="Cost">Cost</option>
+                                <option value="Personal Spend">Personal Spend</option>
                             </select>
                             <input type="text" id="spd-notes" placeholder="Notes (e.g., Item / Vendor)" required>
                             <button type="submit" class="neon-btn"><i class="fas fa-plus"></i></button>
