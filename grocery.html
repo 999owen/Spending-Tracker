@@ -8,20 +8,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+
         :root {
-            --bg-outer: #0A0A0A; 
-            --bg-inner: #101010;
-            --panel-bg: #161B22; 
-            --border-color: #2D333B; 
-            --text-main: #E6EDF3;
-            --text-muted: #8B949E;
-            --accent-green: #4ADE80; 
-            --accent-blue: #60A5FA; 
-            --accent-red: #F87171; 
             --sidebar-width: 240px;
             --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
         }
+
 
         body {
             font-family: var(--font-family);
@@ -83,7 +76,7 @@
         }
 
         .sidebar-menu-item:hover, .sidebar-menu-item.active {
-            background-color: #1F2937;
+            background-color: var(--hover-bg);
             color: var(--text-main);
         }
 
@@ -132,10 +125,10 @@
 
         .panel {
             background-color: var(--panel-bg);
-            border-radius: 12px;
+            border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
             padding: 25px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: var(--card-shadow);
         }
 
         .panel-header {
@@ -202,7 +195,7 @@
 
         input[type="text"], input[type="number"], input[type="date"] {
             flex: 1;
-            background-color: #1A1A1A;
+            background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             color: var(--text-main);
             padding: 10px;
@@ -244,7 +237,7 @@
         }
 
         button.neon-btn:hover {
-            background-color: #1F2937;
+            background-color: var(--hover-bg);
             border-color: rgba(96, 165, 250, 0.4);
         }
 
@@ -267,7 +260,7 @@
         }
 
         .kpi-card {
-            background-color: #1A1A1A;
+            background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 15px;
@@ -293,7 +286,7 @@
             position: relative;
             height: 300px;
             width: 100%;
-            background-color: #1A1A1A;
+            background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 15px;
@@ -355,6 +348,14 @@
             }
         }
     </style>
+
+    <link rel="stylesheet" href="theme.css">
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem('outflow_theme') || 'default';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      })();
+    </script>
 </head>
 <body>
 
@@ -396,7 +397,7 @@
                                 <h3>Monthly Spend vs Cap</h3>
                                 <div class="kpi-value" id="kpi-total-spent">$0.00</div>
                                 <div id="kpi-pct-badge" style="font-size: 11px; color: var(--text-muted); margin-bottom: 2px;">0% of limit used</div>
-                                <div id="kpi-pacing-badge" style="font-size: 11px; padding: 2px 6px; border-radius: 12px; display: inline-block;">On Track</div>
+                                <div id="kpi-pacing-badge" style="font-size: 11px; padding: 2px 6px; border-radius: var(--card-radius); display: inline-block;">On Track</div>
                             </div>
                             <div class="kpi-card">
                                 <h3>14-Day Rolling Burn</h3>
@@ -657,7 +658,7 @@
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                labels: { color: '#8B949E' }
+                                labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim() }
                             },
                             tooltip: {
                                 callbacks: {
@@ -674,12 +675,12 @@
                         },
                         scales: {
                             x: {
-                                ticks: { color: '#8B949E' },
-                                grid: { color: '#2D333B', drawBorder: false }
+                                ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim() },
+                                grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim(), drawBorder: false }
                             },
                             y: {
-                                ticks: { color: '#8B949E' },
-                                grid: { color: '#2D333B', drawBorder: false },
+                                ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim() },
+                                grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim(), drawBorder: false },
                                 beginAtZero: true
                             }
                         }
@@ -769,6 +770,15 @@
             }
             this.reset();
             renderGroceries();
+        });
+
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'outflow_theme' || !e.key) {
+                const savedTheme = localStorage.getItem('outflow_theme') || 'default';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                renderGroceryDashboard();
+            }
         });
 
         // Stay in sync if another tab clears or imports data

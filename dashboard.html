@@ -10,21 +10,13 @@
     <!-- Include Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+
         :root {
-            --bg-outer: #0A0A0A; 
-            --bg-inner: #101010;
-            --panel-bg: #161B22; 
-            --border-color: #2D333B; 
-            --text-main: #E6EDF3;
-            --text-muted: #8B949E;
-            --accent-green: #4ADE80; 
-            --accent-blue: #60A5FA; 
-            --accent-red: #F87171;
-            --accent-yellow: #FBBF24;
             --sidebar-width: 240px;
             --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
         }
+
 
         body {
             font-family: var(--font-family);
@@ -86,7 +78,7 @@
         }
 
         .sidebar-menu-item:hover, .sidebar-menu-item.active {
-            background-color: #1F2937;
+            background-color: var(--hover-bg);
             color: var(--text-main);
         }
 
@@ -137,11 +129,11 @@
         .card {
             background-color: var(--panel-bg);
             padding: 20px;
-            border-radius: 12px;
+            border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
             text-align: center;
             position: relative;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: var(--card-shadow);
             transition: border-color 0.2s var(--ease-in-out);
         }
 
@@ -188,10 +180,10 @@
 
         .chart-panel {
             background-color: var(--panel-bg);
-            border-radius: 12px;
+            border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
             padding: 25px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: var(--card-shadow);
         }
 
         .chart-panel-header {
@@ -231,10 +223,10 @@
 
         .panel {
             background-color: var(--panel-bg);
-            border-radius: 12px;
+            border-radius: var(--card-radius);
             border: 1px solid var(--border-color);
             padding: 25px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            box-shadow: var(--card-shadow);
         }
 
         .panel-header {
@@ -298,7 +290,7 @@
 
         input[type="text"], input[type="number"], input[type="date"] {
             flex: 1;
-            background-color: #1A1A1A;
+            background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             color: var(--text-main);
             padding: 10px;
@@ -335,7 +327,7 @@
         }
 
         button.neon-btn:hover {
-            background-color: #1F2937;
+            background-color: var(--hover-bg);
             border-color: rgba(96, 165, 250, 0.4);
         }
 
@@ -393,6 +385,14 @@
             }
         }
     </style>
+
+    <link rel="stylesheet" href="theme.css">
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem('outflow_theme') || 'default';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      })();
+    </script>
 </head>
 <body>
 
@@ -742,10 +742,10 @@
                     plugins: {
                         legend: {
                             display: true,
-                            labels: { color: '#8B949E', boxWidth: 12 }
+                            labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim(), boxWidth: 12 }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(16, 16, 16, 0.9)',
+                            backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--chart-tooltip-bg').trim(),
                             titleColor: '#fff',
                             bodyColor: '#fff',
                             callbacks: {
@@ -771,8 +771,8 @@
                         }
                     },
                     scales: {
-                        x: { display: true, grid: { display: false }, ticks: { color: '#8B949E' } },
-                        y: { display: true, grid: { color: '#2D333B' }, ticks: { color: '#8B949E' }, beginAtZero: true }
+                        x: { display: true, grid: { display: false }, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim() } },
+                        y: { display: true, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-grid').trim() }, ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--chart-text').trim() }, beginAtZero: true }
                     }
                 }
             });
@@ -814,7 +814,7 @@
                         plugins: {
                             legend: {
                                 position: 'right',
-                                labels: { color: '#E6EDF3', font: { size: 11 }, padding: 10, boxWidth: 12 }
+                                labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim(), font: { size: 11 }, padding: 10, boxWidth: 12 }
                             },
                             tooltip: {
                                 callbacks: {
@@ -841,6 +841,15 @@
                 });
             }
         }
+
+
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'outflow_theme' || !e.key) {
+                const savedTheme = localStorage.getItem('outflow_theme') || 'default';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                updateCharts();
+            }
+        });
 
         // Stay in sync if another tab clears or imports data
         TrackerStore.subscribe(function (fresh) {
