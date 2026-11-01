@@ -8,7 +8,6 @@
 
     const DEFAULT_SETTINGS = {
         spending_percentage: 35,
-        monthly_total_limit: 1000,
         monthly_grocery_limit: 280,
         currency: 'USD',
         github_token: '',
@@ -82,7 +81,6 @@
         const s = Object.assign({}, DEFAULT_SETTINGS, raw && typeof raw === 'object' ? raw : {});
         return {
             spending_percentage: clampNumber(s.spending_percentage, DEFAULT_SETTINGS.spending_percentage, 1, 100),
-            monthly_total_limit: clampNumber(s.monthly_total_limit, DEFAULT_SETTINGS.monthly_total_limit, 0.01, 1e9),
             monthly_grocery_limit: clampNumber(s.monthly_grocery_limit, DEFAULT_SETTINGS.monthly_grocery_limit, 0.01, 1e9),
             // An unrecognised currency would make Intl.NumberFormat throw and blank every page.
             currency: SUPPORTED_CURRENCIES.indexOf(s.currency) > -1 ? s.currency : DEFAULT_SETTINGS.currency,
@@ -375,6 +373,14 @@
             });
         });
 
+        const existingBillIds = new Set(currentDb.recurring_bills.map(b => b.id));
+        result.db.recurring_bills.forEach(bill => {
+            if (!existingBillIds.has(bill.id)) {
+                currentDb.recurring_bills.push(bill);
+                importedCount++;
+            }
+        });
+
         // Preserve existing gist settings if not present in backup
         const token = currentDb.settings.github_token;
         const gistId = currentDb.settings.gist_id;
@@ -401,7 +407,8 @@
             income: db.income_entries.length,
             spend: db.spend_entries.length,
             grocery: db.grocery_entries.length,
-            total: db.income_entries.length + db.spend_entries.length + db.grocery_entries.length
+            bills: db.recurring_bills.length,
+            total: db.income_entries.length + db.spend_entries.length + db.grocery_entries.length + db.recurring_bills.length
         };
     }
 
